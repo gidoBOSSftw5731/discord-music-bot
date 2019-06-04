@@ -21,9 +21,9 @@ go get github.com/giorgisio/goav/avformat
 chmod +x ../scripts/install_ffmpeg.sh
 ./scripts/install_ffmpeg.sh
 
-#get youtubedl
+#get goydl
 go get github.com/BrianAllred/goydl
 
 #install youtubedl
-
-apt install -y youtube-dl
+curl -L https://yt-dl.org/latest/youtube-dl -o /usr/local/bin/youtube-dl
+chmod a+rx /usr/local/bin/youtube-dl

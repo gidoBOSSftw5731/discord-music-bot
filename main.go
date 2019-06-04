@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,21 +12,26 @@ import (
 )
 
 const (
-	tmpdir       = "/tmp/JAMusicBot"
-	subdir       = "audios"
-	viddir       = "videos"
+	subdir = "audios"
+	//viddir       = "videos" // unneeded due to move to ydl
 	youtubeChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
 )
 
+var tmpdir string
+
 func main() {
-	setup()
-	err := dlToTmp("FdnLtHEeqtU")
+	tmpdir, err := ioutil.TempDir("/tmp", "JAMB")
+	if err != nil {
+		log.Fatalln("Failed to get video info", err)
+	}
+	setup(tmpdir)
+	err = dlToTmp("FdnLtHEeqtU", tmpdir)
 	if err != nil {
 		log.Fatalln("Failed to get video info", err)
 	}
 }
 
-func dlToTmp(url string) error {
+func dlToTmp(url, tmpdir string) error {
 
 	// open youtubedl client
 	youtubeDl := goydl.NewYoutubeDl()
@@ -33,14 +39,27 @@ func dlToTmp(url string) error {
 	//make slice of ID  for file saving purposes
 	idSplit := strings.Split(url, "")
 
-	youtubeDl.Options.Output.Value = filepath.Join(tmpdir, viddir, idSplit[0], idSplit[1], fmt.Fprintln(url+".mp3"))
+	log.Traceln(filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.mp3", url)))
+
+	// set options
+	youtubeDl.Options.Output.Value = filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.mp3", url))
 	youtubeDl.Options.ExtractAudio.Value = true
 	youtubeDl.Options.AudioFormat.Value = "mp3"
+	youtubeDl.VideoURL = fmt.Sprintf("www.youtube.com/watch?v=%v", url)
+	// listen to errors from ydl
+	//go io.Copy(os.Stdout, youtubeDl.Stdout)
+	//go io.Copy(os.Stderr, youtubeDl.Stderr)
+
+	dwnld, err := youtubeDl.Download()
+	if err != nil {
+		return err
+	}
+	dwnld.Wait()
 
 	return nil
 }
 
-func setup() {
+func setup(tmpdir string) {
 	// setup log func (stupid ik but its here)
 	log.EnableLevel("info")
 	log.EnableLevel("error")
@@ -53,8 +72,8 @@ func setup() {
 	ytCharsSplit := strings.Split(youtubeChars, "")
 	for f := 0; f < len(youtubeChars); f++ {
 		for s := 0; s < len(youtubeChars); s++ {
-			err := os.MkdirAll(filepath.Join(tmpdir, subdir, ytCharsSplit[f], ytCharsSplit[s]), 755)
-			err = os.MkdirAll(filepath.Join(tmpdir, viddir, ytCharsSplit[f], ytCharsSplit[s]), 755)
+			err := os.MkdirAll(filepath.Join(tmpdir, subdir, ytCharsSplit[f], ytCharsSplit[s]), 0755)
+			//err = os.MkdirAll(filepath.Join(tmpdir, viddir, ytCharsSplit[f], ytCharsSplit[s]), 755) // unneeded due to move to ydl
 			if err != nil {
 				log.Fatalln("Error in making subdirectories", err)
 			}
