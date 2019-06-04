@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/BrianAllred/goydl"
 	"github.com/gidoBOSSftw5731/log"
 )
 
@@ -25,15 +27,15 @@ func main() {
 
 func dlToTmp(url string) error {
 
+	// open youtubedl client
+	youtubeDl := goydl.NewYoutubeDl()
+
 	//make slice of ID  for file saving purposes
 	idSplit := strings.Split(url, "")
 
-	// make file
-	file, err := os.Create(filepath.Join(tmpdir, viddir, idSplit[0], idSplit[1], url) + ".mp4")
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+	youtubeDl.Options.Output.Value = filepath.Join(tmpdir, viddir, idSplit[0], idSplit[1], fmt.Fprintln(url+".mp3"))
+	youtubeDl.Options.ExtractAudio.Value = true
+	youtubeDl.Options.AudioFormat.Value = "mp3"
 
 	return nil
 }
