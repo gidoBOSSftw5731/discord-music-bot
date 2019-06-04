@@ -12,4 +12,10 @@ export CGO_LDFLAGS="-L$FFMPEG_ROOT/lib/ -lavcodec -lavformat -lavutil -lswscale 
 export CGO_CFLAGS="-I$FFMPEG_ROOT/include"
 export LD_LIBRARY_PATH=$HOME/ffmpeg/lib
 
-go get github.com/3d0c/gmf
+go get github.com/giorgisio/goav/avformat
+
+mkdir tmp
+cd tmp
+wget https://ffmpeg.org/releases/ffmpeg-4.1.3.tar.xz 
+chmod ../scripts/install_ffmpeg.sh
+../scripts/install_ffmpeg.sh

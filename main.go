@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"github.com/gidoBOSSftw5731/log"
-	"github.com/giorgisio/goav/avformat"
-	"github.com/rylio/ytdl"
 )
 
 const (
@@ -19,43 +17,23 @@ const (
 
 func main() {
 	setup()
-	err := dlToTmp("https://www.youtube.com/watch?v=FdnLtHEeqtU")
+	err := dlToTmp("FdnLtHEeqtU")
 	if err != nil {
 		log.Fatalln("Failed to get video info", err)
 	}
 }
 
 func dlToTmp(url string) error {
-	// make video object
-	vid, err := ytdl.GetVideoInfo(url)
-	if err != nil {
-		return err
-	}
 
 	//make slice of ID  for file saving purposes
-	idSplit := strings.Split(vid.ID, "")
+	idSplit := strings.Split(url, "")
 
 	// make file
-	file, err := os.Create(filepath.Join(tmpdir, viddir, idSplit[0], idSplit[1], vid.ID) + ".mp4")
+	file, err := os.Create(filepath.Join(tmpdir, viddir, idSplit[0], idSplit[1], url) + ".mp4")
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-
-	// download to temp file
-	vid.Download(vid.Formats[172], file)
-
-	// now time to rip the audio
-	finalFile, err := os.Create(filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], vid.ID) + ".mp3")
-	if err != nil {
-		return err
-	}
-	defer finalFile.Close()
-
-	// Register all formats and codecs
-	avformat.AvRegisterAll()
-
-	ctx := avformat.AvformatAllocContext()
 
 	return nil
 }
