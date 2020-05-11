@@ -39,6 +39,7 @@ var (
 	tmpdir     string
 	playingMap = make(map[string]bool)
 	queue      = make(map[string][]string)
+	connMap    = make(map[string]*discordgo.VoiceConnection)
 	// youtubeSearchCache takes a youtube search and returns its search results
 	youtubeSearchCache = make(map[string]*youtube.SearchResult)
 	// ytdlCache takes a path to a downloaded video and returns it's youtube search results
@@ -67,7 +68,8 @@ func discordStart() {
 	discord.AddHandler(func(discord *discordgo.Session, ready *discordgo.Ready) {
 		servers := discord.State.Guilds
 
-		err = discord.UpdateStatus(2, fmt.Sprintf("Pin all the things! | %vhelp | Pinning in %v servers!",
+		err = discord.UpdateStatus(2, fmt.Sprintf(
+			"It might not be good, but it's mine| %vhelp | Jamming in %v servers!",
 			Config.prefix, len(servers)))
 		if err != nil {
 			log.Errorln("Error attempting to set my status")
@@ -124,6 +126,9 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			log.Errorln("No command sent")
 			return
 		}
+		msg, _ := discord.ChannelMessageSend(message.ChannelID,
+			"Please wait while I download the song")
+
 		searchQuery := strings.Join(commandContents[1:], " ")
 
 		log.Debugf("Searching for %v", searchQuery)
@@ -168,9 +173,13 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				return
 			}
 
+			connMap[vs.GuildID] = dgv
+
 			playingMap[vs.GuildID] = true
 
 			queue[vs.GuildID] = []string{fpath}
+
+			discord.ChannelMessageDelete(msg.ChannelID, msg.ID)
 
 			for playingMap[vs.GuildID] {
 				if len(queue[vs.GuildID]) != 0 {
@@ -205,6 +214,38 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			Fields:    fields,
 			Timestamp: time.Now().Format(time.RFC3339)}) // Discord wants ISO8601; RFC3339 is an extension of ISO8601 and should be completely compatible.
 
+	case "help", "h":
+		fields := []*discordgo.MessageEmbedField{
+			&discordgo.MessageEmbedField{
+				Name:  "Play a song",
+				Value: "p: Play song, either provide title, youtube ID, or youtube URL."},
+			&discordgo.MessageEmbedField{
+				Name:  "Show server queue",
+				Value: "q: List the queue for the server"},
+			&discordgo.MessageEmbedField{
+				Name:  "Leave the voice channel",
+				Value: "d: Self explainatory"},
+			&discordgo.MessageEmbedField{
+				Name:  "Invite this bot to other servers",
+				Value: "Invite URL: https://discord.com/api/oauth2/authorize?client_id=581249727958351891&permissions=37054784&scope=bot"}}
+
+		discord.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
+			Title:       "How to use:",
+			Description: fmt.Sprintf("All commands must be prefixed by the bot prefix: %v", Config.Prefix),
+			Author:      &discordgo.MessageEmbedAuthor{},
+			Color:       rand.Intn(16777215), // Green
+			Fields:      fields,
+			Timestamp:   time.Now().Format(time.RFC3339)}) // Discord wants ISO8601; RFC3339 is an extension of ISO8601 and should be completely compatible.
+	case "leave", "disconnect", "d", "dc", "die":
+		if val, ok := connMap[message.GuildID]; ok &&
+			playingMap[message.GuildID] {
+			queue[message.GuildID] = []string{}
+			playingMap[message.GuildID] = false
+			val.Disconnect()
+			discord.ChannelMessageSend(message.ChannelID, "Leaving")
+		} else {
+			discord.ChannelMessageSend(message.ChannelID, "Not in a channel :(")
+		}
 	}
 }
 
