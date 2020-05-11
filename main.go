@@ -60,11 +60,7 @@ func dlToTmp(url, tmpdir string) error {
 }
 
 func setup(tmpdir string) {
-	// setup log func (stupid ik but its here)
-	log.EnableLevel("info")
-	log.EnableLevel("error")
-	log.EnableLevel("debug")
-	log.EnableLevel("trace")
+	log.SetCallDepth(4)
 
 	// make dir
 
