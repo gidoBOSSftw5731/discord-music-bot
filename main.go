@@ -34,8 +34,9 @@ var Config = struct {
 }{}
 
 var (
-	tmpdir        string
-	connectionMap map[string]*discordgo.VoiceConnection
+	tmpdir     string
+	playingMap = make(map[string]bool)
+	queue      = make(map[string][]string)
 )
 
 func main() {
@@ -87,6 +88,14 @@ func findUserVoiceState(session *discordgo.Session, userid string) (*discordgo.V
 	return nil, fmt.Errorf("could not find user's voice state")
 }
 
+func removeFromSlice(slice []string, s int) []string {
+	if len(slice) == 1 {
+		var newSlice []string
+		return newSlice
+	}
+	return append(slice[:s], slice[s+1:]...)
+}
+
 func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	if message.Content == "" || len(message.Content) < len(Config.prefix) {
 		return
@@ -103,13 +112,12 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 
 	log.Tracef("Command: %v, command contents %v", command, commandContents)
 
-	if len(command) < 2 {
-		log.Errorln("No command sent")
-		return
-	}
-
 	switch strings.Split(command, " ")[0] {
 	case "p", "play", "Play", "song", "P":
+		if len(command) < 2 {
+			log.Errorln("No command sent")
+			return
+		}
 		searchQuery := strings.Join(commandContents[1:], " ")
 
 		log.Debugf("Searching for %v", searchQuery)
@@ -130,27 +138,54 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 
 		log.Debugf("Path for song: %v", fpath)
 
-		discord.ChannelMessageSend(fmt.Sprintf("Playing %v now!", video.Snippet.Title),
-			message.ChannelID)
-
 		//connect to voice channel
 
-		vs, err := findUserVoiceState(discord, message.Author.ID)
+		isPlayingInServer := playingMap[message.GuildID]
+		switch isPlayingInServer {
+		case true:
+			queue[message.GuildID] = append(queue[message.GuildID], fpath)
+		case false:
+			vs, err := findUserVoiceState(discord, message.Author.ID)
+			if err != nil {
+				log.Errorln(err)
+				discord.ChannelMessageSend(message.ChannelID, "Join a voice channel")
+				return
+			}
+
+			dgv, err := discord.ChannelVoiceJoin(vs.GuildID,
+				vs.ChannelID, false, true)
+			if err != nil {
+				discord.ChannelMessageSend(message.ChannelID,
+					fmt.Sprintf("Error playing video: %v", err))
+				return
+			}
+			defer dgv.Close()
+
+			playingMap[vs.GuildID] = true
+
+			queue[vs.GuildID] = []string{fpath}
+
+			for playingMap[vs.GuildID] {
+				if len(queue[vs.GuildID]) != 0 {
+					fpath = queue[vs.GuildID][0]
+					queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
+					discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Playing \"%v\" now! http://youtu.be/%v",
+						video.Snippet.Title, video.Id.VideoId))
+					dgvoice.PlayAudioFile(dgv, fpath, make(chan bool))
+				} else { // yes I am using else, sue me
+					playingMap[vs.GuildID] = false
+					dgv.Disconnect()
+					dgv.Unlock()
+				}
+			}
+
+		}
+
+	case "q", "queue", "Q", "Queue":
+		_, err := discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Queue for server: %v", queue[message.GuildID]))
 		if err != nil {
 			log.Errorln(err)
-			discord.ChannelMessageSend(message.ChannelID, "Join a voice channel")
-			return
 		}
-
-		dgv, err := discord.ChannelVoiceJoin(vs.GuildID,
-			vs.ChannelID, false, true)
-		if err != nil {
-			discord.ChannelMessageSend(message.ChannelID,
-				fmt.Sprintf("Error playing video: %v", err))
-			return
-		}
-
-		dgvoice.PlayAudioFile(dgv, fpath, make(chan bool))
 	}
 }
 
