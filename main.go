@@ -43,6 +43,7 @@ var (
 	connMap      = make(map[string]*discordgo.VoiceConnection)
 	loopMap      = make(map[string]bool)
 	loopQueueMap = make(map[string]bool)
+	stopMap      = make(map[string]chan bool)
 	// youtubeSearchCache takes a youtube search and returns its search results
 	youtubeSearchCache = make(map[string]*youtube.SearchResult)
 	// ytdlCache takes a path to a downloaded video and returns it's youtube search results
@@ -188,13 +189,16 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			queue[vs.GuildID] = []string{fpath}
 
 			for playingMap[vs.GuildID] {
+
 				if len(queue[vs.GuildID]) != 0 {
 					fpath = queue[vs.GuildID][0]
 					if !loopMap[message.GuildID] && !loopQueueMap[message.GuildID] {
 						discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Playing \"%v\" now! http://youtu.be/%v",
 							ytdlCache[fpath].Snippet.Title, ytdlCache[fpath].Id.VideoId))
 					}
-					dgvoice.PlayAudioFile(dgv, fpath, make(chan bool))
+
+					stopMap[vs.GuildID] <- false
+					dgvoice.PlayAudioFile(dgv, fpath, stopMap[vs.GuildID])
 					if !loopMap[vs.GuildID] && !loopQueueMap[vs.GuildID] {
 						queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
 					} else if !loopQueueMap[vs.GuildID] {
@@ -288,7 +292,9 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			})
 		}
 		discord.ChannelMessageSend(message.ChannelID, "Shuffling")
-	case "remove":
+	case "skip", "s", "S":
+		stopMap[message.GuildID] <- true
+		discord.ChannelMessageSend(message.GuildID, "skipped")
 
 	}
 }
