@@ -11,6 +11,7 @@ import (
 	"google.golang.org/api/option"
 
 	"github.com/BrianAllred/goydl"
+	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/gidoBOSSftw5731/log"
 	"github.com/jinzhu/configor"
@@ -33,7 +34,8 @@ var Config = struct {
 }{}
 
 var (
-	tmpdir string
+	tmpdir        string
+	connectionMap map[string]*discordgo.VoiceConnection
 )
 
 func main() {
@@ -72,6 +74,17 @@ func discordStart() {
 	defer discord.Close()
 
 	<-make(chan struct{})
+}
+
+func findUserVoiceState(session *discordgo.Session, userid string) (*discordgo.VoiceState, error) {
+	for _, guild := range session.State.Guilds {
+		for _, vs := range guild.VoiceStates {
+			if vs.UserID == userid {
+				return vs, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("could not find user's voice state")
 }
 
 func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate) {
@@ -116,6 +129,28 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		}
 
 		log.Debugf("Path for song: %v", fpath)
+
+		discord.ChannelMessageSend(fmt.Sprintf("Playing %v now!", video.Snippet.Title),
+			message.ChannelID)
+
+		//connect to voice channel
+
+		vs, err := findUserVoiceState(discord, message.Author.ID)
+		if err != nil {
+			log.Errorln(err)
+			discord.ChannelMessageSend(message.ChannelID, "Join a voice channel")
+			return
+		}
+
+		dgv, err := discord.ChannelVoiceJoin(vs.GuildID,
+			vs.ChannelID, false, true)
+		if err != nil {
+			discord.ChannelMessageSend(message.ChannelID,
+				fmt.Sprintf("Error playing video: %v", err))
+			return
+		}
+
+		dgvoice.PlayAudioFile(dgv, fpath, make(chan bool))
 	}
 }
 
@@ -160,10 +195,16 @@ func dlToTmp(url string) (string, error) {
 	fpath := filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.mp3", url))
 	log.Traceln(fpath)
 
+	if _, err := os.Stat(fpath); err == nil {
+		log.Traceln("already downloaded")
+		return fpath, nil
+	}
 	// set options
 	youtubeDl.Options.Output.Value = filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.mp3", url))
 	youtubeDl.Options.ExtractAudio.Value = true
 	youtubeDl.Options.AudioFormat.Value = "mp3"
+	youtubeDl.Options.KeepVideo = goydl.BoolOption{Value: false} // why is this a thing
+
 	youtubeDl.VideoURL = fmt.Sprintf("www.youtube.com/watch?v=%v", url)
 	// listen to errors from ydl
 	//go io.Copy(os.Stdout, youtubeDl.Stdout)
