@@ -188,7 +188,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			for playingMap[vs.GuildID] {
 				if len(queue[vs.GuildID]) != 0 {
 					fpath = queue[vs.GuildID][0]
-					if !loopMap[message.GuildID] || !loopQueueMap[message.GuildID] {
+					if !loopMap[message.GuildID] && !loopQueueMap[message.GuildID] {
 						discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Playing \"%v\" now! http://youtu.be/%v",
 							ytdlCache[fpath].Snippet.Title, ytdlCache[fpath].Id.VideoId))
 					}
