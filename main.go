@@ -241,7 +241,10 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				Value: "loop: Self explainatory, overrides loopqueue"},
 			&discordgo.MessageEmbedField{
 				Name:  "Loop queue",
-				Value: "loop: Self explainatory"},
+				Value: "loopqueue: Self explainatory"},
+			&discordgo.MessageEmbedField{
+				Name:  "Shuffle",
+				Value: "shuffle: mixes tracks randomly,  does not follow looping and may cause unexpected issues while looping."},
 			&discordgo.MessageEmbedField{
 				Name:  "Invite this bot to other servers",
 				Value: "Invite URL: https://discord.com/api/oauth2/authorize?client_id=581249727958351891&permissions=37054784&scope=bot"}}
@@ -273,6 +276,13 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 
 		discord.ChannelMessageSend(message.ChannelID,
 			fmt.Sprintf("Looping queue is now set to %v", loopQueueMap[message.GuildID]))
+	case "shuffle":
+		if len(queue[message.GuildID]) > 1 {
+			rand.Shuffle(len(queue[message.GuildID]), func(i, j int) {
+				queue[message.GuildID][i], queue[message.GuildID][j] = queue[message.GuildID][j], queue[message.GuildID][i]
+			})
+		}
+		discord.ChannelMessageSend(message.ChannelID, "Shuffling")
 	}
 }
 
