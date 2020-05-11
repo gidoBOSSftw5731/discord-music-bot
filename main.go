@@ -252,6 +252,9 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				Name:  "Shuffle",
 				Value: "shuffle: mixes tracks randomly,  does not follow looping and may cause unexpected issues while looping."},
 			&discordgo.MessageEmbedField{
+				Name:  "Skip",
+				Value: "s: Skips the current song, does NOT remove from queue, cannot resume"},
+			&discordgo.MessageEmbedField{
 				Name:  "Invite this bot to other servers",
 				Value: "Invite URL: https://discord.com/api/oauth2/authorize?client_id=581249727958351891&permissions=37054784&scope=bot"},
 			&discordgo.MessageEmbedField{
