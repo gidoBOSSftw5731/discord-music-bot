@@ -36,11 +36,12 @@ var Config = struct {
 }{}
 
 var (
-	tmpdir     string
-	playingMap = make(map[string]bool)
-	queue      = make(map[string][]string)
-	connMap    = make(map[string]*discordgo.VoiceConnection)
-	loopMap    = make(map[string]bool)
+	tmpdir       string
+	playingMap   = make(map[string]bool)
+	queue        = make(map[string][]string)
+	connMap      = make(map[string]*discordgo.VoiceConnection)
+	loopMap      = make(map[string]bool)
+	loopQueueMap = make(map[string]bool)
 	// youtubeSearchCache takes a youtube search and returns its search results
 	youtubeSearchCache = make(map[string]*youtube.SearchResult)
 	// ytdlCache takes a path to a downloaded video and returns it's youtube search results
@@ -153,6 +154,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		log.Debugf("Path for song: %v", fpath)
 
 		//connect to voice channel
+		discord.ChannelMessageDelete(msg.ChannelID, msg.ID)
 
 		isPlayingInServer := playingMap[message.GuildID]
 		switch isPlayingInServer {
@@ -160,6 +162,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			queue[message.GuildID] = append(queue[message.GuildID], fpath)
 		case false:
 			loopMap[message.GuildID] = false
+			loopQueueMap[message.GuildID] = false
 
 			vs, err := findUserVoiceState(discord, message.Author.ID)
 			if err != nil {
@@ -182,18 +185,19 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 
 			queue[vs.GuildID] = []string{fpath}
 
-			discord.ChannelMessageDelete(msg.ChannelID, msg.ID)
-
 			for playingMap[vs.GuildID] {
 				if len(queue[vs.GuildID]) != 0 {
 					fpath = queue[vs.GuildID][0]
-					if !loopMap[message.GuildID] {
+					if !loopMap[message.GuildID] || !loopQueueMap[message.GuildID] {
 						discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Playing \"%v\" now! http://youtu.be/%v",
 							ytdlCache[fpath].Snippet.Title, ytdlCache[fpath].Id.VideoId))
 					}
 					dgvoice.PlayAudioFile(dgv, fpath, make(chan bool))
-					if !loopMap[vs.GuildID] {
+					if !loopMap[vs.GuildID] && !loopQueueMap[vs.GuildID] {
 						queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
+					} else if !loopQueueMap[vs.GuildID] {
+						queue[vs.GuildID] = append(removeFromSlice(queue[vs.GuildID], 0),
+							fpath)
 					}
 				} else { // yes I am using else, sue me
 					playingMap[vs.GuildID] = false
@@ -234,6 +238,9 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				Value: "d: Self explainatory"},
 			&discordgo.MessageEmbedField{
 				Name:  "Loop one track",
+				Value: "loop: Self explainatory, overrides loopqueue"},
+			&discordgo.MessageEmbedField{
+				Name:  "Loop queue",
 				Value: "loop: Self explainatory"},
 			&discordgo.MessageEmbedField{
 				Name:  "Invite this bot to other servers",
@@ -256,11 +263,16 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		} else {
 			discord.ChannelMessageSend(message.ChannelID, "Not in a channel :(")
 		}
-	case "loop", "singleloop":
+	case "loop", "Loop", "singleloop":
 		loopMap[message.GuildID] = !loopMap[message.GuildID]
 
 		discord.ChannelMessageSend(message.ChannelID,
 			fmt.Sprintf("Looping one track/song is now set to %v", loopMap[message.GuildID]))
+	case "loopqueue", "lq", "Loopqueue":
+		loopQueueMap[message.GuildID] = !loopQueueMap[message.GuildID]
+
+		discord.ChannelMessageSend(message.ChannelID,
+			fmt.Sprintf("Looping queue is now set to %v", loopQueueMap[message.GuildID]))
 	}
 }
 
