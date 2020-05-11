@@ -247,7 +247,10 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				Value: "shuffle: mixes tracks randomly,  does not follow looping and may cause unexpected issues while looping."},
 			&discordgo.MessageEmbedField{
 				Name:  "Invite this bot to other servers",
-				Value: "Invite URL: https://discord.com/api/oauth2/authorize?client_id=581249727958351891&permissions=37054784&scope=bot"}}
+				Value: "Invite URL: https://discord.com/api/oauth2/authorize?client_id=581249727958351891&permissions=37054784&scope=bot"},
+			&discordgo.MessageEmbedField{
+				Name:  "See the source code",
+				Value: "Github URL: https://imagen.click/d/jamb_git"}}
 
 		discord.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
 			Title:       "How to use:",
