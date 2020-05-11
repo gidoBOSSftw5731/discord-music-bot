@@ -197,7 +197,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 							ytdlCache[fpath].Snippet.Title, ytdlCache[fpath].Id.VideoId))
 					}
 
-					stopMap[vs.GuildID] <- false
+					stopMap[vs.GuildID] = make(chan bool)
 					dgvoice.PlayAudioFile(dgv, fpath, stopMap[vs.GuildID])
 					if !loopMap[vs.GuildID] && !loopQueueMap[vs.GuildID] {
 						queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
