@@ -40,6 +40,7 @@ var (
 	playingMap = make(map[string]bool)
 	queue      = make(map[string][]string)
 	connMap    = make(map[string]*discordgo.VoiceConnection)
+	loopMap    = make(map[string]bool)
 	// youtubeSearchCache takes a youtube search and returns its search results
 	youtubeSearchCache = make(map[string]*youtube.SearchResult)
 	// ytdlCache takes a path to a downloaded video and returns it's youtube search results
@@ -158,6 +159,8 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		case true:
 			queue[message.GuildID] = append(queue[message.GuildID], fpath)
 		case false:
+			loopMap[message.GuildID] = false
+
 			vs, err := findUserVoiceState(discord, message.Author.ID)
 			if err != nil {
 				log.Errorln(err)
@@ -184,10 +187,14 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			for playingMap[vs.GuildID] {
 				if len(queue[vs.GuildID]) != 0 {
 					fpath = queue[vs.GuildID][0]
-					queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
-					discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Playing \"%v\" now! http://youtu.be/%v",
-						ytdlCache[fpath].Snippet.Title, ytdlCache[fpath].Id.VideoId))
+					if !loopMap[message.GuildID] {
+						discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Playing \"%v\" now! http://youtu.be/%v",
+							ytdlCache[fpath].Snippet.Title, ytdlCache[fpath].Id.VideoId))
+					}
 					dgvoice.PlayAudioFile(dgv, fpath, make(chan bool))
+					if !loopMap[vs.GuildID] {
+						queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
+					}
 				} else { // yes I am using else, sue me
 					playingMap[vs.GuildID] = false
 					dgv.Disconnect()
@@ -226,6 +233,9 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				Name:  "Leave the voice channel",
 				Value: "d: Self explainatory"},
 			&discordgo.MessageEmbedField{
+				Name:  "Loop one track",
+				Value: "loop: Self explainatory"},
+			&discordgo.MessageEmbedField{
 				Name:  "Invite this bot to other servers",
 				Value: "Invite URL: https://discord.com/api/oauth2/authorize?client_id=581249727958351891&permissions=37054784&scope=bot"}}
 
@@ -246,6 +256,11 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		} else {
 			discord.ChannelMessageSend(message.ChannelID, "Not in a channel :(")
 		}
+	case "loop", "singleloop":
+		loopMap[message.GuildID] = !loopMap[message.GuildID]
+
+		discord.ChannelMessageSend(message.ChannelID,
+			fmt.Sprintf("Looping one track/song is now set to %v", loopMap[message.GuildID]))
 	}
 }
 
