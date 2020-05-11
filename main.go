@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"google.golang.org/api/option"
 
@@ -37,6 +39,10 @@ var (
 	tmpdir     string
 	playingMap = make(map[string]bool)
 	queue      = make(map[string][]string)
+	// youtubeSearchCache takes a youtube search and returns its search results
+	youtubeSearchCache = make(map[string]*youtube.SearchResult)
+	// ytdlCache takes a path to a downloaded video and returns it's youtube search results
+	ytdlCache = make(map[string]*youtube.SearchResult)
 )
 
 func main() {
@@ -136,6 +142,8 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			return
 		}
 
+		ytdlCache[fpath] = video
+
 		log.Debugf("Path for song: %v", fpath)
 
 		//connect to voice channel
@@ -159,7 +167,6 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 					fmt.Sprintf("Error playing video: %v", err))
 				return
 			}
-			defer dgv.Close()
 
 			playingMap[vs.GuildID] = true
 
@@ -170,26 +177,43 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 					fpath = queue[vs.GuildID][0]
 					queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
 					discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Playing \"%v\" now! http://youtu.be/%v",
-						video.Snippet.Title, video.Id.VideoId))
+						ytdlCache[fpath].Snippet.Title, ytdlCache[fpath].Id.VideoId))
 					dgvoice.PlayAudioFile(dgv, fpath, make(chan bool))
 				} else { // yes I am using else, sue me
 					playingMap[vs.GuildID] = false
 					dgv.Disconnect()
-					dgv.Unlock()
+					//dgv.Unlock()
 				}
 			}
 
 		}
 
 	case "q", "queue", "Q", "Queue":
-		_, err := discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Queue for server: %v", queue[message.GuildID]))
-		if err != nil {
-			log.Errorln(err)
+		var fields []*discordgo.MessageEmbedField
+		for n, i := range queue[message.GuildID] {
+			v := ytdlCache[i]
+			f := discordgo.MessageEmbedField{Name: string(n), Inline: false,
+				Value: v.Snippet.Title}
+
+			fields = append(fields, &f)
 		}
+
+		discord.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
+			Title:     "Queue for server:",
+			Author:    &discordgo.MessageEmbedAuthor{},
+			Color:     rand.Intn(16777215), // Green
+			Fields:    fields,
+			Timestamp: time.Now().Format(time.RFC3339)}) // Discord wants ISO8601; RFC3339 is an extension of ISO8601 and should be completely compatible.
+
 	}
 }
 
 func searchForVideo(input string) (*youtube.SearchResult, error) {
+
+	if val, ok := youtubeSearchCache[input]; ok {
+		log.Traceln("Getting search from cache (yay!)")
+		return val, nil
+	}
 
 	ctx := context.Background()
 	service, err := youtube.NewService(ctx, option.WithAPIKey(Config.googleDeveloperKey))
@@ -212,6 +236,7 @@ func searchForVideo(input string) (*youtube.SearchResult, error) {
 
 	for _, i := range response.Items {
 		if i.Id.Kind == "youtube#video" {
+			youtubeSearchCache[input] = i
 			return i, nil
 		}
 	}
