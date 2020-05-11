@@ -252,8 +252,11 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				Name:  "Shuffle",
 				Value: "shuffle: mixes tracks randomly,  does not follow looping and may cause unexpected issues while looping."},
 			&discordgo.MessageEmbedField{
-				Name:  "Skip",
+				Name:  "Skip the current song",
 				Value: "s: Skips the current song, does NOT remove from queue, cannot resume"},
+			&discordgo.MessageEmbedField{
+				Name:  "Remove a song",
+				Value: "remove: Removes the song input in the same order as is in the queue. will not skip if it is the current song"},
 			&discordgo.MessageEmbedField{
 				Name:  "Invite this bot to other servers",
 				Value: "Invite URL: https://discord.com/api/oauth2/authorize?client_id=581249727958351891&permissions=37054784&scope=bot"},
@@ -297,8 +300,24 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		discord.ChannelMessageSend(message.ChannelID, "Shuffling")
 	case "skip", "s", "S":
 		stopMap[message.GuildID] <- true
-		discord.ChannelMessageSend(message.GuildID, "skipped")
-
+		discord.ChannelMessageSend(message.ChannelID, "skipped")
+	case "remove":
+		if len(command) < 2 {
+			log.Errorln("No command sent")
+			return
+		}
+		n, err := strconv.Atoi(commandContents[1])
+		if err != nil {
+			log.Errorln(err)
+			return
+		}
+		if n-1 > len(queue[message.GuildID]) || n-1 < 0 {
+			discord.ChannelMessageSend(message.ChannelID, "Out of range")
+			return
+		}
+		t := queue[message.GuildID][n-1]
+		removeFromSlice(queue[message.GuildID], n-1)
+		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Removed \"%v\"", t))
 	}
 }
 
