@@ -21,8 +21,8 @@ const (
 var (
 	tmpdir string
 	Config = struct {
-		GoogleDeveloperKey string `required:"true"`
-		DiscordBotToken    string `required:"true"`
+		googleDeveloperKey string `required:"true"`
+		discordBotToken    string `required:"true"`
 	}{}
 )
 

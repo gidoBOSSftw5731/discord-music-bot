@@ -1,0 +1,11 @@
+github.com/BrianAllred/goydl v0.0.0-20171128220148-015c9f2f47fc h1:xuMCRW5RWNoM2gyLlugPiiALtxpgku1PHNxQDt7UJ/Y=
+github.com/BrianAllred/goydl v0.0.0-20171128220148-015c9f2f47fc/go.mod h1:hpSBK67Uduw/SGy6bObP8YrAZjcw0WR+gV/KTl9o2Lc=
+github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
+github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/gidoBOSSftw5731/log v0.0.0-20190718204308-3ae037c6203f h1:vg/m9Ir/7GFkx2+ZWxdVjIF7ExwETtWZA99uqJtwuiQ=
+github.com/gidoBOSSftw5731/log v0.0.0-20190718204308-3ae037c6203f/go.mod h1:a8Ke7EvCSaGUHJbc4PB7gaOgeqAsb8TgGX0kOaunaOY=
+github.com/jinzhu/configor v1.2.0 h1:u78Jsrxw2+3sGbGMgpY64ObKU4xWCNmNRJIjGVqxYQA=
+github.com/jinzhu/configor v1.2.0/go.mod h1:nX89/MOmDba7ZX7GCyU/VIaQ2Ar2aizBl2d3JLF/rDc=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/yaml.v2 v2.2.2 h1:ZCJp+EgiOT7lHqUV2J862kp8Qj64Jo6az82+3Td9dZw=
+gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
