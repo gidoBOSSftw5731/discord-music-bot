@@ -9,6 +9,7 @@ import (
 
 	"github.com/BrianAllred/goydl"
 	"github.com/gidoBOSSftw5731/log"
+	"github.com/jinzhu/configor"
 )
 
 const (
@@ -17,15 +18,17 @@ const (
 	youtubeChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
 )
 
-var tmpdir string
+var (
+	tmpdir string
+	Config = struct {
+		GoogleDeveloperKey string `required:"true"`
+		DiscordBotToken    string `required:"true"`
+	}{}
+)
 
 func main() {
-	tmpdir, err := ioutil.TempDir("/tmp", "JAMB")
-	if err != nil {
-		log.Fatalln("Failed to get video info", err)
-	}
-	setup(tmpdir)
-	err = dlToTmp("FdnLtHEeqtU", tmpdir)
+	setup()
+	err := dlToTmp("CxQKltWI0NA", tmpdir)
 	if err != nil {
 		log.Fatalln("Failed to get video info", err)
 	}
@@ -59,8 +62,19 @@ func dlToTmp(url, tmpdir string) error {
 	return nil
 }
 
-func setup(tmpdir string) {
+func setup() {
 	log.SetCallDepth(4)
+
+	err := configor.Load(&Config, "config.yml")
+	if err != nil {
+		log.Fatalf("Error with config: %v", err)
+	}
+
+	//var err error
+	tmpdir, err = ioutil.TempDir("/tmp", "JAMB")
+	if err != nil {
+		log.Fatalln("Failed to get video info", err)
+	}
 
 	// make dir
 

@@ -22,7 +22,10 @@ chmod +x ../scripts/install_ffmpeg.sh
 ./scripts/install_ffmpeg.sh
 
 #get goydl
-go get github.com/BrianAllred/goydl
+go get -u github.com/BrianAllred/goydl
+go get -u google.golang.org/api/youtube/v3
+go get -u google.golang.org/api/googleapi/transport
+go get -u github.com/jinzhu/configor
 
 #install youtubedl
 curl -L https://yt-dl.org/latest/youtube-dl -o /usr/local/bin/youtube-dl
