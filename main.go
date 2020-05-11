@@ -1,15 +1,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"google.golang.org/api/option"
+
 	"github.com/BrianAllred/goydl"
+	"github.com/bwmarrin/discordgo"
 	"github.com/gidoBOSSftw5731/log"
 	"github.com/jinzhu/configor"
+	"google.golang.org/api/youtube/v3"
 )
 
 const (
@@ -18,23 +23,133 @@ const (
 	youtubeChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
 )
 
+var Config = struct {
+	GoogleDeveloperKey string `required:"true" json:"googleDeveloperKey"`
+	DiscordBotToken    string `required:"true" json:"discordBotToken"`
+	Prefix             string `default:"**" json:"prefix"`
+	googleDeveloperKey string
+	prefix             string
+	discordBotToken    string
+}{}
+
 var (
 	tmpdir string
-	Config = struct {
-		googleDeveloperKey string `required:"true"`
-		discordBotToken    string `required:"true"`
-	}{}
 )
 
 func main() {
 	setup()
-	err := dlToTmp("CxQKltWI0NA", tmpdir)
+	discordStart()
+}
+
+//for legacy support, please dont rely on this
+// It's 4am, I woke up at 10pm, I really cba to change all the calls
+// to this damn function
+func errCheck(msg string, err error) {
 	if err != nil {
-		log.Fatalln("Failed to get video info", err)
+		log.Fatalf("%s: %+v", msg, err)
 	}
 }
 
-func dlToTmp(url, tmpdir string) error {
+func discordStart() {
+	discord, err := discordgo.New("Bot " + Config.discordBotToken)
+	errCheck("error creating discord session", err)
+
+	discord.AddHandler(commandHandler)
+	discord.AddHandler(func(discord *discordgo.Session, ready *discordgo.Ready) {
+		servers := discord.State.Guilds
+
+		err = discord.UpdateStatus(2, fmt.Sprintf("Pin all the things! | %vhelp | Pinning in %v servers!",
+			Config.prefix, len(servers)))
+		if err != nil {
+			log.Errorln("Error attempting to set my status")
+		}
+
+		log.Debugf("PinnerBoi has started on %d servers", len(servers))
+	})
+
+	err = discord.Open()
+	errCheck("Error opening connection to Discord", err)
+	defer discord.Close()
+
+	<-make(chan struct{})
+}
+
+func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate) {
+	if message.Content == "" || len(message.Content) < len(Config.prefix) {
+		return
+	}
+	if message.Content[:len(Config.Prefix)] != Config.Prefix ||
+		len(strings.Split(message.Content, Config.prefix)) < 2 {
+		return
+	}
+
+	log.Debugln("prefix found")
+
+	command := strings.Split(message.Content, Config.Prefix)[1]
+	commandContents := strings.Split(message.Content, " ") // 0 = *command, 1 = first arg, etc
+
+	log.Tracef("Command: %v, command contents %v", command, commandContents)
+
+	if len(command) < 2 {
+		log.Errorln("No command sent")
+		return
+	}
+
+	switch strings.Split(command, " ")[0] {
+	case "p", "play", "Play", "song", "P":
+		searchQuery := strings.Join(commandContents[1:], " ")
+
+		log.Debugf("Searching for %v", searchQuery)
+
+		video, err := searchForVideo(searchQuery)
+		if err != nil {
+			discord.ChannelMessageSend(message.ChannelID,
+				fmt.Sprintf("Error finding video: %v", err))
+			return
+		}
+
+		fpath, err := dlToTmp(video.Id.VideoId)
+		if err != nil {
+			discord.ChannelMessageSend(message.ChannelID,
+				fmt.Sprintf("Error saving video: %v", err))
+			return
+		}
+
+		log.Debugf("Path for song: %v", fpath)
+	}
+}
+
+func searchForVideo(input string) (*youtube.SearchResult, error) {
+
+	ctx := context.Background()
+	service, err := youtube.NewService(ctx, option.WithAPIKey(Config.googleDeveloperKey))
+	if err != nil {
+		return nil, err
+	}
+
+	// Make the API call to YouTube.
+	call := service.Search.List("id,snippet").
+		Q(input).
+		MaxResults(3)
+	response, err := call.Do()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(response.Items) == 0 {
+		return nil, fmt.Errorf("no results")
+	}
+
+	for _, i := range response.Items {
+		if i.Id.Kind == "youtube#video" {
+			return i, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no videos in query")
+}
+
+func dlToTmp(url string) (string, error) {
 
 	// open youtubedl client
 	youtubeDl := goydl.NewYoutubeDl()
@@ -42,7 +157,8 @@ func dlToTmp(url, tmpdir string) error {
 	//make slice of ID  for file saving purposes
 	idSplit := strings.Split(url, "")
 
-	log.Traceln(filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.mp3", url)))
+	fpath := filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.mp3", url))
+	log.Traceln(fpath)
 
 	// set options
 	youtubeDl.Options.Output.Value = filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.mp3", url))
@@ -55,20 +171,26 @@ func dlToTmp(url, tmpdir string) error {
 
 	dwnld, err := youtubeDl.Download()
 	if err != nil {
-		return err
+		return "", err
 	}
 	dwnld.Wait()
 
-	return nil
+	return fpath, nil
 }
 
 func setup() {
 	log.SetCallDepth(4)
 
-	err := configor.Load(&Config, "config.yml")
+	err := configor.Load(&Config, "config.json")
 	if err != nil {
 		log.Fatalf("Error with config: %v", err)
 	}
+
+	Config.googleDeveloperKey = Config.GoogleDeveloperKey
+	Config.prefix = Config.Prefix
+	Config.discordBotToken = Config.DiscordBotToken
+
+	//println(Config.googleDeveloperKey)
 
 	//var err error
 	tmpdir, err = ioutil.TempDir("/tmp", "JAMB")
