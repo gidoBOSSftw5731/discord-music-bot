@@ -311,13 +311,13 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			log.Errorln(err)
 			return
 		}
-		if n-1 > len(queue[message.GuildID]) || n-1 < 0 {
+		if n > len(queue[message.GuildID]) || n < 0 {
 			discord.ChannelMessageSend(message.ChannelID, "Out of range")
 			return
 		}
-		t := queue[message.GuildID][n-1]
-		removeFromSlice(queue[message.GuildID], n-1)
-		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Removed \"%v\"", t))
+		t := queue[message.GuildID][n]
+		removeFromSlice(queue[message.GuildID], n)
+		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Removed \"%v\"", ytdlCache[t]))
 	}
 }
 
