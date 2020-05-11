@@ -316,8 +316,8 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			return
 		}
 		t := queue[message.GuildID][n]
-		removeFromSlice(queue[message.GuildID], n)
-		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Removed \"%v\"", ytdlCache[t]))
+		queue[message.GuildID] = removeFromSlice(queue[message.GuildID], n)
+		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Removed \"%v\"", ytdlCache[t].Snippet.Title))
 	}
 }
 
