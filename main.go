@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,6 +47,7 @@ var (
 	youtubeSearchCache = make(map[string]*youtube.SearchResult)
 	// ytdlCache takes a path to a downloaded video and returns it's youtube search results
 	ytdlCache = make(map[string]*youtube.SearchResult)
+	testing   = false // please make this false on prod, please
 )
 
 func main() {
@@ -212,7 +214,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		var fields []*discordgo.MessageEmbedField
 		for n, i := range queue[message.GuildID] {
 			v := ytdlCache[i]
-			f := discordgo.MessageEmbedField{Name: string(n), Inline: false,
+			f := discordgo.MessageEmbedField{Name: strconv.Itoa(n), Inline: false,
 				Value: v.Snippet.Title}
 
 			fields = append(fields, &f)
@@ -286,6 +288,8 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			})
 		}
 		discord.ChannelMessageSend(message.ChannelID, "Shuffling")
+	case "remove":
+
 	}
 }
 
