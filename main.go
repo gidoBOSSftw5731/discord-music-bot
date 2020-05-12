@@ -132,7 +132,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			return
 		}
 		msg, _ := discord.ChannelMessageSend(message.ChannelID,
-			"Please wait while I download the song")
+			"Please wait while I download the song, please note downloading a large playlist may take a long time.")
 
 		searchQuery := strings.Join(commandContents[1:], " ")
 		log.Debugf("Searching for %v", searchQuery)
