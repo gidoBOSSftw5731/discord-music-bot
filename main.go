@@ -48,7 +48,7 @@ var (
 	youtubeSearchCache = make(map[string]*youtube.SearchResult)
 	// ytdlCache takes a path to a downloaded video and returns it's youtube search results
 	ytdlCache = make(map[string]*youtube.SearchResult)
-	testing   = false // please make this false on prod, please
+	//testing   = false // please make this false on prod, please
 )
 
 func main() {
@@ -135,34 +135,46 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			"Please wait while I download the song")
 
 		searchQuery := strings.Join(commandContents[1:], " ")
-
 		log.Debugf("Searching for %v", searchQuery)
 
-		video, err := searchForVideo(searchQuery)
-		if err != nil {
-			discord.ChannelMessageSend(message.ChannelID,
-				fmt.Sprintf("Error finding video: %v", err))
-			return
+		switch {
+		case (len(commandContents[1:]) == 1) && strings.Contains(searchQuery, "playlist?list="):
+			fpaths, err := returnPlaylist(searchQuery)
+			if err != nil {
+				discord.ChannelMessageSend(message.ChannelID,
+					fmt.Sprintf("Error getting playlist: %v", err))
+				return
+			}
+
+			if queue[message.GuildID] == nil {
+				queue[message.GuildID] = []string{}
+			}
+
+			queue[message.GuildID] = append(queue[message.GuildID], fpaths...)
+		default:
+			video, err := searchForVideo(searchQuery)
+			if err != nil {
+				discord.ChannelMessageSend(message.ChannelID,
+					fmt.Sprintf("Error finding video: %v", err))
+				return
+			}
+
+			fpath, err := dlToTmp(video.Id.VideoId)
+			if err != nil {
+				discord.ChannelMessageSend(message.ChannelID,
+					fmt.Sprintf("Error saving video: %v", err))
+				return
+			}
+
+			log.Debugf("Path for song: %v", fpath)
+			ytdlCache[fpath] = video
 		}
-
-		fpath, err := dlToTmp(video.Id.VideoId)
-		if err != nil {
-			discord.ChannelMessageSend(message.ChannelID,
-				fmt.Sprintf("Error saving video: %v", err))
-			return
-		}
-
-		ytdlCache[fpath] = video
-
-		log.Debugf("Path for song: %v", fpath)
 
 		//connect to voice channel
 		discord.ChannelMessageDelete(msg.ChannelID, msg.ID)
 
 		isPlayingInServer := playingMap[message.GuildID]
 		switch isPlayingInServer {
-		case true:
-			queue[message.GuildID] = append(queue[message.GuildID], fpath)
 		case false:
 			loopMap[message.GuildID] = false
 			loopQueueMap[message.GuildID] = false
@@ -186,12 +198,12 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 
 			playingMap[vs.GuildID] = true
 
-			queue[vs.GuildID] = []string{fpath}
+			//queue[vs.GuildID] = []string{fpath}
 
 			for playingMap[vs.GuildID] {
 
 				if len(queue[vs.GuildID]) != 0 {
-					fpath = queue[vs.GuildID][0]
+					fpath := queue[vs.GuildID][0]
 					if !loopMap[message.GuildID] && !loopQueueMap[message.GuildID] {
 						discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Playing \"%v\" now! http://youtu.be/%v",
 							ytdlCache[fpath].Snippet.Title, ytdlCache[fpath].Id.VideoId))
@@ -320,6 +332,54 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		queue[message.GuildID] = removeFromSlice(queue[message.GuildID], n)
 		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Removed \"%v\"", ytdlCache[t].Snippet.Title))
 	}
+}
+
+func returnPlaylist(input string) ([]string, error) {
+
+	ctx := context.Background()
+	service, err := youtube.NewService(ctx, option.WithAPIKey(Config.googleDeveloperKey))
+	if err != nil {
+		return nil, err
+	}
+
+	// Make the API call to YouTube.
+	call := service.Search.List("id,snippet").
+		Q(input).
+		MaxResults(1)
+	response, err := call.Do()
+	if err != nil {
+		return nil, err
+	}
+
+	var result *youtube.SearchResult
+	for _, i := range response.Items {
+		if i.Id.Kind == "youtube#playlist" {
+			youtubeSearchCache[input] = i
+			result = i
+		}
+	}
+
+	if result == nil {
+		return nil, fmt.Errorf("no playlist in query")
+
+	}
+
+	itemCall := service.PlaylistItems.List(result.Id.PlaylistId)
+
+	playlistResp, err := itemCall.Do()
+	if err != nil {
+		return nil, err
+	}
+
+	var listOfVideos []string
+
+	for _, i := range playlistResp.Items {
+		out, _ := dlToTmp(i.Id)
+		listOfVideos = append(listOfVideos, out)
+	}
+
+	return listOfVideos, nil
+
 }
 
 func searchForVideo(input string) (*youtube.SearchResult, error) {
