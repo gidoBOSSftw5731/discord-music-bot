@@ -364,7 +364,7 @@ func returnPlaylist(input string) ([]string, error) {
 
 	}
 
-	itemCall := service.PlaylistItems.List("resourceId").
+	itemCall := service.PlaylistItems.List("id").
 		PlaylistId(result.Id.PlaylistId)
 
 	playlistResp, err := itemCall.Do()
