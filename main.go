@@ -378,7 +378,7 @@ func returnPlaylist(input string) ([]string, error) {
 		out, _ := dlToTmp(i.Id)
 
 		// this is stupid and will max out my quota. Too bad!
-		sr, err := searchForVideo(i.Id)
+		sr, err := searchForVideo("youtu.be/" + i.Id)
 		if err != nil {
 			log.Errorln(err)
 			continue
