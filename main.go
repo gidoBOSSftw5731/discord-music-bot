@@ -377,6 +377,14 @@ func returnPlaylist(input string) ([]string, error) {
 	for _, i := range playlistResp.Items {
 		out, _ := dlToTmp(i.Id)
 		listOfVideos = append(listOfVideos, out)
+
+		// add to cache manually because I hate my life
+		var cacheentry *youtube.SearchResult
+
+		cacheentry.Snippet.Title = i.Snippet.Title
+		cacheentry.Id.VideoId = i.Id
+
+		ytdlCache[out] = cacheentry
 	}
 
 	return listOfVideos, nil
