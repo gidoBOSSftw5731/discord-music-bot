@@ -379,16 +379,12 @@ func returnPlaylist(input string) ([]string, error) {
 		listOfVideos = append(listOfVideos, out)
 
 		// add to cache manually because I hate my life
-		t := youtube.SearchResultSnippet{
-			Title: i.Snippet.Title}
-		rid := youtube.ResourceId{
-			VideoId: i.Id}
+		var cacheentry = new(youtube.SearchResult)
 
-		var cacheentry = youtube.SearchResult{
-			Snippet: &t,
-			Id:      &rid}
+		cacheentry.Snippet.Title = i.Snippet.Title
+		cacheentry.Id.VideoId = i.Id
 
-		ytdlCache[out] = &cacheentry
+		ytdlCache[out] = cacheentry
 	}
 
 	return listOfVideos, nil
