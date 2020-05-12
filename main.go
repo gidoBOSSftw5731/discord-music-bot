@@ -364,8 +364,9 @@ func returnPlaylist(input string) ([]string, error) {
 
 	}
 
-	itemCall := service.PlaylistItems.List("id").
-		PlaylistId(result.Id.PlaylistId)
+	itemCall := service.PlaylistItems.List("id,snippet").
+		PlaylistId(result.Id.PlaylistId).
+		MaxResults(50)
 
 	playlistResp, err := itemCall.Do()
 	if err != nil {
@@ -375,10 +376,11 @@ func returnPlaylist(input string) ([]string, error) {
 	var listOfVideos []string
 
 	for _, i := range playlistResp.Items {
-		out, _ := dlToTmp(i.Id)
+		out, _ := dlToTmp(i.Snippet.ResourceId.VideoId)
 
 		// this is stupid and will max out my quota. Too bad!
 		sr, err := searchForVideo("youtu.be/" + i.Snippet.ResourceId.VideoId)
+		//fmt.Printf("%+v", i)
 		if err != nil {
 			log.Errorln(err)
 			continue
