@@ -201,9 +201,10 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 					dgvoice.PlayAudioFile(dgv, fpath, stopMap[vs.GuildID])
 					if !loopMap[vs.GuildID] && !loopQueueMap[vs.GuildID] {
 						queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
-					} else if !loopQueueMap[vs.GuildID] {
+					} else if loopQueueMap[vs.GuildID] {
 						queue[vs.GuildID] = append(removeFromSlice(queue[vs.GuildID], 0),
 							fpath)
+
 					}
 				} else { // yes I am using else, sue me
 					playingMap[vs.GuildID] = false
@@ -377,12 +378,12 @@ func dlToTmp(url string) (string, error) {
 	youtubeDl.Options.ExtractAudio.Value = true
 	youtubeDl.Options.AudioFormat.Value = "mp3"
 	youtubeDl.Options.KeepVideo = goydl.BoolOption{Value: false} // why is this a thing
-//	youtubeDl.Options.AudioQuality = goydl.StringOption{Value: "0"}
+	//	youtubeDl.Options.AudioQuality = goydl.StringOption{Value: "0"}
 
 	youtubeDl.VideoURL = fmt.Sprintf("www.youtube.com/watch?v=%v", url)
 	// listen to errors from ydl
-//	go io.Copy(os.Stdout, youtubeDl.Stdout)
-//	go io.Copy(os.Stderr, youtubeDl.Stderr)
+	//	go io.Copy(os.Stdout, youtubeDl.Stdout)
+	//	go io.Copy(os.Stderr, youtubeDl.Stderr)
 
 	dwnld, err := youtubeDl.Download()
 	if err != nil {
