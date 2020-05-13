@@ -398,10 +398,23 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 					Name:  "Publishing time",
 					Value: ptime.Format(time.RFC1123),
 				}}
+
+			var thumbnailURL string
+			//apparently some thumbnails are nil
+			for _, i := range []*youtube.Thumbnail{np.Snippet.Thumbnails.Maxres,
+				np.Snippet.Thumbnails.High, np.Snippet.Thumbnails.Medium, np.Snippet.Thumbnails.Standard,
+				np.Snippet.Thumbnails.Default} {
+				if i != nil {
+					thumbnailURL = i.Url
+					break
+				}
+			}
+
+			log.Debugf("Thumbnail: %v", thumbnailURL)
 			discord.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
 				Title:       np.Snippet.Title,
-				Image:       &discordgo.MessageEmbedImage{URL: np.Snippet.Thumbnails.Maxres.Url},
-				Description: fmt.Sprintf("%.150s...", np.Snippet.Description),
+				Image:       &discordgo.MessageEmbedImage{URL: thumbnailURL},
+				Description: np.Snippet.Description,
 				Author:      &discordgo.MessageEmbedAuthor{},
 				Color:       rand.Intn(16777215), // rand
 				Fields:      fields,
