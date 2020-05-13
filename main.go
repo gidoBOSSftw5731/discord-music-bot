@@ -220,6 +220,9 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 					}
 				} else { // yes I am using else, sue me
 					playingMap[vs.GuildID] = false
+					if dgv == nil {
+						break
+					}
 					dgv.Disconnect()
 					//dgv.Unlock()
 				}
