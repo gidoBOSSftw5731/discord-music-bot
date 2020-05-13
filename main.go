@@ -109,6 +109,126 @@ func removeFromSlice(slice []string, s int) []string {
 	return append(slice[:s], slice[s+1:]...)
 }
 
+func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
+	command string, commandContents []string) {
+	if len(command) < 2 {
+		log.Errorln("No command sent")
+		return
+	}
+	msg, _ := discord.ChannelMessageSend(message.ChannelID,
+		"Please wait while I download the song, please note downloading a large playlist may take a long time.")
+
+	searchQuery := strings.Join(commandContents[1:], " ")
+	log.Debugf("Searching for %v", searchQuery)
+
+	switch {
+	case (len(commandContents[1:]) == 1) && strings.Contains(searchQuery, "playlist?list="):
+		fpaths, err := returnPlaylist(searchQuery)
+		if err != nil {
+			discord.ChannelMessageSend(message.ChannelID,
+				fmt.Sprintf("Error getting playlist: %v", err))
+			return
+		}
+
+		if queue[message.GuildID] == nil {
+			queue[message.GuildID] = []string{}
+		}
+
+		queue[message.GuildID] = append(queue[message.GuildID], fpaths...)
+	default:
+		video, err := searchForVideo(searchQuery)
+		if err != nil {
+			discord.ChannelMessageSend(message.ChannelID,
+				fmt.Sprintf("Error finding video: %v", err))
+			return
+		}
+
+		fpath, err := dlToTmp(video.Id.VideoId)
+		if err != nil {
+			discord.ChannelMessageSend(message.ChannelID,
+				fmt.Sprintf("Error saving video: %v", err))
+			return
+		}
+
+		log.Debugf("Path for song: %v", fpath)
+		ytdlCache[fpath] = video
+		if queue[message.GuildID] == nil {
+			queue[message.GuildID] = []string{}
+		}
+
+		queue[message.GuildID] = append(queue[message.GuildID], fpath)
+	}
+
+	//connect to voice channel
+	discord.ChannelMessageDelete(msg.ChannelID, msg.ID)
+
+	isPlayingInServer := playingMap[message.GuildID]
+	switch isPlayingInServer {
+	case false:
+		loopMap[message.GuildID] = false
+		loopQueueMap[message.GuildID] = false
+		attemptedtoleave := false
+
+		vs, err := findUserVoiceState(discord, message.Author.ID)
+		if err != nil {
+			log.Errorln(err)
+			discord.ChannelMessageSend(message.ChannelID, "Join a voice channel")
+			return
+		}
+
+		dgv, err := discord.ChannelVoiceJoin(vs.GuildID,
+			vs.ChannelID, false, true)
+		if err != nil {
+			discord.ChannelMessageSend(message.ChannelID,
+				fmt.Sprintf("Error playing video: %v", err))
+			return
+		}
+
+		connMap[vs.GuildID] = dgv
+
+		playingMap[vs.GuildID] = true
+
+		//queue[vs.GuildID] = []string{fpath}
+
+		for playingMap[vs.GuildID] {
+
+			if len(queue[vs.GuildID]) != 0 {
+				attemptedtoleave = false
+				fpath := queue[vs.GuildID][0]
+				if !loopMap[message.GuildID] && !loopQueueMap[message.GuildID] {
+					discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Playing \"%v\" now! http://youtu.be/%v",
+						ytdlCache[fpath].Snippet.Title, ytdlCache[fpath].Id.VideoId))
+				}
+
+				stopMap[vs.GuildID] = make(chan bool)
+				dgvoice.PlayAudioFile(dgv, fpath, stopMap[vs.GuildID])
+				if !loopMap[vs.GuildID] && !loopQueueMap[vs.GuildID] {
+					queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
+				} else if loopQueueMap[vs.GuildID] {
+					queue[vs.GuildID] = append(removeFromSlice(queue[vs.GuildID], 0),
+						fpath)
+
+				}
+			} else { // yes I am using else, sue me
+				if !attemptedtoleave {
+					attemptedtoleave = true
+					time.Sleep(time.Second * 5)
+					continue
+				}
+
+				playingMap[vs.GuildID] = false
+				if dgv == nil {
+					break
+				}
+				dgv.Disconnect()
+				//dgv.Unlock()
+			}
+		}
+
+	}
+
+}
+
 func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	if message.Content == "" || len(message.Content) < len(Config.prefix) {
 		return
@@ -127,109 +247,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 
 	switch strings.Split(command, " ")[0] {
 	case "p", "play", "Play", "song", "P":
-		if len(command) < 2 {
-			log.Errorln("No command sent")
-			return
-		}
-		msg, _ := discord.ChannelMessageSend(message.ChannelID,
-			"Please wait while I download the song, please note downloading a large playlist may take a long time.")
-
-		searchQuery := strings.Join(commandContents[1:], " ")
-		log.Debugf("Searching for %v", searchQuery)
-
-		switch {
-		case (len(commandContents[1:]) == 1) && strings.Contains(searchQuery, "playlist?list="):
-			fpaths, err := returnPlaylist(searchQuery)
-			if err != nil {
-				discord.ChannelMessageSend(message.ChannelID,
-					fmt.Sprintf("Error getting playlist: %v", err))
-				return
-			}
-
-			if queue[message.GuildID] == nil {
-				queue[message.GuildID] = []string{}
-			}
-
-			queue[message.GuildID] = append(queue[message.GuildID], fpaths...)
-		default:
-			video, err := searchForVideo(searchQuery)
-			if err != nil {
-				discord.ChannelMessageSend(message.ChannelID,
-					fmt.Sprintf("Error finding video: %v", err))
-				return
-			}
-
-			fpath, err := dlToTmp(video.Id.VideoId)
-			if err != nil {
-				discord.ChannelMessageSend(message.ChannelID,
-					fmt.Sprintf("Error saving video: %v", err))
-				return
-			}
-
-			log.Debugf("Path for song: %v", fpath)
-			ytdlCache[fpath] = video
-		}
-
-		//connect to voice channel
-		discord.ChannelMessageDelete(msg.ChannelID, msg.ID)
-
-		isPlayingInServer := playingMap[message.GuildID]
-		switch isPlayingInServer {
-		case false:
-			loopMap[message.GuildID] = false
-			loopQueueMap[message.GuildID] = false
-
-			vs, err := findUserVoiceState(discord, message.Author.ID)
-			if err != nil {
-				log.Errorln(err)
-				discord.ChannelMessageSend(message.ChannelID, "Join a voice channel")
-				return
-			}
-
-			dgv, err := discord.ChannelVoiceJoin(vs.GuildID,
-				vs.ChannelID, false, true)
-			if err != nil {
-				discord.ChannelMessageSend(message.ChannelID,
-					fmt.Sprintf("Error playing video: %v", err))
-				return
-			}
-
-			connMap[vs.GuildID] = dgv
-
-			playingMap[vs.GuildID] = true
-
-			//queue[vs.GuildID] = []string{fpath}
-
-			for playingMap[vs.GuildID] {
-
-				if len(queue[vs.GuildID]) != 0 {
-					fpath := queue[vs.GuildID][0]
-					if !loopMap[message.GuildID] && !loopQueueMap[message.GuildID] {
-						discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Playing \"%v\" now! http://youtu.be/%v",
-							ytdlCache[fpath].Snippet.Title, ytdlCache[fpath].Id.VideoId))
-					}
-
-					stopMap[vs.GuildID] = make(chan bool)
-					dgvoice.PlayAudioFile(dgv, fpath, stopMap[vs.GuildID])
-					if !loopMap[vs.GuildID] && !loopQueueMap[vs.GuildID] {
-						queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
-					} else if loopQueueMap[vs.GuildID] {
-						queue[vs.GuildID] = append(removeFromSlice(queue[vs.GuildID], 0),
-							fpath)
-
-					}
-				} else { // yes I am using else, sue me
-					playingMap[vs.GuildID] = false
-					if dgv == nil {
-						break
-					}
-					dgv.Disconnect()
-					//dgv.Unlock()
-				}
-			}
-
-		}
-
+		commandPlay(discord, message, command, commandContents)
 	case "q", "queue", "Q", "Queue":
 		var fields []*discordgo.MessageEmbedField
 		for n, i := range queue[message.GuildID] {
@@ -265,6 +283,9 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				Name:  "Loop queue",
 				Value: "loopqueue: Self explainatory"},
 			&discordgo.MessageEmbedField{
+				Name:  "Remove duplicate tracks",
+				Value: "removedupes: removes duplicate songs, the first one in the queue stays."},
+			&discordgo.MessageEmbedField{
 				Name:  "Shuffle",
 				Value: "shuffle: mixes tracks randomly,  does not follow looping and may cause unexpected issues while looping."},
 			&discordgo.MessageEmbedField{
@@ -273,6 +294,9 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			&discordgo.MessageEmbedField{
 				Name:  "Remove a song",
 				Value: "remove: Removes the song input in the same order as is in the queue. will not skip if it is the current song"},
+			&discordgo.MessageEmbedField{
+				Name:  "Extra commands",
+				Value: "If there is a command not listed here, check the rythm help list: https://rythmbot.co/features#list"},
 			&discordgo.MessageEmbedField{
 				Name:  "Invite this bot to other servers",
 				Value: "Invite URL: https://discord.com/api/oauth2/authorize?client_id=581249727958351891&permissions=37054784&scope=bot"},
@@ -297,7 +321,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		} else {
 			discord.ChannelMessageSend(message.ChannelID, "Not in a channel :(")
 		}
-	case "loop", "Loop", "singleloop":
+	case "loop", "Loop", "singleloop", "l":
 		loopMap[message.GuildID] = !loopMap[message.GuildID]
 
 		discord.ChannelMessageSend(message.ChannelID,
@@ -334,7 +358,52 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		t := queue[message.GuildID][n]
 		queue[message.GuildID] = removeFromSlice(queue[message.GuildID], n)
 		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Removed \"%v\"", ytdlCache[t].Snippet.Title))
+	case "removedupes":
+		if queue[message.GuildID] == nil {
+			discord.ChannelMessageSend(message.ChannelID, "Queue empty")
+		}
+
+		queue[message.GuildID] = unique(queue[message.GuildID])
+
+		discord.ChannelMessageSend(message.ChannelID, "Removed dupes")
+	case "np", "nowplaying", "whatsplaying", "playing":
+		switch {
+		case queue[message.GuildID] == nil:
+			discord.ChannelMessageSend(message.ChannelID, "No queue for this server")
+		case len(queue[message.GuildID]) == 0:
+			discord.ChannelMessageSend(message.ChannelID, "Nothing in the queue")
+		default:
+			np := ytdlCache[queue[message.GuildID][0]]
+			ptime, _ := time.Parse(time.RFC3339, np.Snippet.PublishedAt)
+			fields := []*discordgo.MessageEmbedField{
+				&discordgo.MessageEmbedField{
+					Name:  "Publishing time",
+					Value: ptime.Format(time.RFC1123),
+				}}
+			discord.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
+				Title:       np.Snippet.Title,
+				Image:       &discordgo.MessageEmbedImage{URL: np.Snippet.Thumbnails.Maxres.Url},
+				Description: fmt.Sprintf("%.150s...", np.Snippet.Description),
+				Author:      &discordgo.MessageEmbedAuthor{},
+				Color:       rand.Intn(16777215), // rand
+				Fields:      fields,
+				URL:         fmt.Sprintf("http://youtu.be/%v", np.Id.VideoId),
+				Timestamp:   time.Now().Format(time.RFC3339)}) // Discord wants ISO8601; RFC3339 is an extension of ISO8601 and should be completely compatible.
+		}
+
 	}
+}
+
+func unique(intSlice []string) []string {
+	keys := make(map[string]bool)
+	list := []string{}
+	for _, entry := range intSlice {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
 }
 
 func returnPlaylist(input string) ([]string, error) {
