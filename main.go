@@ -110,7 +110,7 @@ func removeFromSlice(slice []string, s int) []string {
 }
 
 func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
-	command string, commandContents []string) {
+	command string, commandContents []string, addtotop bool) {
 	if len(command) < 2 {
 		log.Errorln("No command sent")
 		return
@@ -134,7 +134,13 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 			queue[message.GuildID] = []string{}
 		}
 
-		queue[message.GuildID] = append(queue[message.GuildID], fpaths...)
+		switch {
+		case !addtotop || len(queue[message.GuildID]) == 0:
+			queue[message.GuildID] = append(queue[message.GuildID], fpaths...)
+		case addtotop:
+			queue[message.GuildID] = append([]string{queue[message.GuildID][0]},
+				append(fpaths, queue[message.GuildID][1:]...)...)
+		}
 	default:
 		video, err := searchForVideo(searchQuery)
 		if err != nil {
@@ -156,7 +162,13 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 			queue[message.GuildID] = []string{}
 		}
 
-		queue[message.GuildID] = append(queue[message.GuildID], fpath)
+		switch {
+		case !addtotop || len(queue[message.GuildID]) == 0:
+			queue[message.GuildID] = append(queue[message.GuildID], fpath)
+		case addtotop:
+			queue[message.GuildID] = append([]string{queue[message.GuildID][0], fpath},
+				queue[message.GuildID][1:]...)
+		}
 	}
 
 	//connect to voice channel
@@ -247,7 +259,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 
 	switch strings.Split(command, " ")[0] {
 	case "p", "play", "Play", "song", "P":
-		commandPlay(discord, message, command, commandContents)
+		commandPlay(discord, message, command, commandContents, false)
 	case "q", "queue", "Q", "Queue":
 		var fields []*discordgo.MessageEmbedField
 		for n, i := range queue[message.GuildID] {
@@ -294,6 +306,12 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			&discordgo.MessageEmbedField{
 				Name:  "Remove a song",
 				Value: "remove: Removes the song input in the same order as is in the queue. will not skip if it is the current song"},
+			&discordgo.MessageEmbedField{
+				Name:  "Now Playing",
+				Value: "np: Self explainatory"},
+			&discordgo.MessageEmbedField{
+				Name:  "Play next",
+				Value: "playnext: (alias playtop) play a song next, dont skip to it though"},
 			&discordgo.MessageEmbedField{
 				Name:  "Extra commands",
 				Value: "If there is a command not listed here, check the rythm help list: https://rythmbot.co/features#list"},
@@ -390,6 +408,8 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				URL:         fmt.Sprintf("http://youtu.be/%v", np.Id.VideoId),
 				Timestamp:   time.Now().Format(time.RFC3339)}) // Discord wants ISO8601; RFC3339 is an extension of ISO8601 and should be completely compatible.
 		}
+	case "playtop", "pt", "playnext", "pn":
+		commandPlay(discord, message, command, commandContents, true)
 
 	}
 }
