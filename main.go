@@ -45,9 +45,9 @@ var (
 	loopQueueMap = make(map[string]bool)
 	stopMap      = make(map[string]chan bool)
 	// youtubeSearchCache takes a youtube search and returns its search results
-	youtubeSearchCache = make(map[string]*youtube.SearchResult)
+	youtubeSearchCache = make(map[string]*youtube.VideoListResponse)
 	// ytdlCache takes a path to a downloaded video and returns it's youtube search results
-	ytdlCache = make(map[string]*youtube.SearchResult)
+	ytdlCache = make(map[string]*youtube.VideoListResponse)
 	//testing   = false // please make this false on prod, please
 )
 
@@ -150,7 +150,7 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 			return
 		}
 
-		fpath, err := dlToTmp(video.Id.VideoId)
+		fpath, err := dlToTmp(video.Items[0].Id)
 		if err != nil {
 			discord.ChannelMessageSend(message.ChannelID,
 				fmt.Sprintf("Error saving video: %v", err))
@@ -211,7 +211,7 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 				fpath := queue[vs.GuildID][0]
 				if !loopMap[message.GuildID] && !loopQueueMap[message.GuildID] {
 					discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Playing \"%v\" now! http://youtu.be/%v",
-						ytdlCache[fpath].Snippet.Title, ytdlCache[fpath].Id.VideoId))
+						ytdlCache[fpath].Items[0].Snippet.Title, ytdlCache[fpath].Items[0].Id))
 				}
 
 				stopMap[vs.GuildID] = make(chan bool)
@@ -267,7 +267,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		for n, i := range queue[message.GuildID] {
 			v := ytdlCache[i]
 			f := discordgo.MessageEmbedField{Name: strconv.Itoa(n), Inline: false,
-				Value: v.Snippet.Title}
+				Value: v.Items[0].Snippet.Title}
 
 			fields = append(fields, &f)
 		}
@@ -377,7 +377,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		}
 		t := queue[message.GuildID][n]
 		queue[message.GuildID] = removeFromSlice(queue[message.GuildID], n)
-		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Removed \"%v\"", ytdlCache[t].Snippet.Title))
+		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Removed \"%v\"", ytdlCache[t].Items[0].Snippet.Title))
 	case "removedupes":
 		if queue[message.GuildID] == nil {
 			discord.ChannelMessageSend(message.ChannelID, "Queue empty")
@@ -395,7 +395,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		default:
 			np := ytdlCache[queue[message.GuildID][0]]
 			// there definitely could never be bad data, it could never happen
-			ptime, _ := time.Parse(time.RFC3339, np.Snippet.PublishedAt)
+			ptime, _ := time.Parse(time.RFC3339, np.Items[0].Snippet.PublishedAt)
 			fields := []*discordgo.MessageEmbedField{
 				&discordgo.MessageEmbedField{
 					Name:  "Publishing time",
@@ -404,9 +404,9 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 
 			var thumbnailURL string
 			//apparently some thumbnails are nil, this is dumb
-			for _, i := range []*youtube.Thumbnail{np.Snippet.Thumbnails.Maxres,
-				np.Snippet.Thumbnails.High, np.Snippet.Thumbnails.Medium, np.Snippet.Thumbnails.Standard,
-				np.Snippet.Thumbnails.Default} {
+			for _, i := range []*youtube.Thumbnail{np.Items[0].Snippet.Thumbnails.Maxres,
+				np.Items[0].Snippet.Thumbnails.High, np.Items[0].Snippet.Thumbnails.Medium,
+				np.Items[0].Snippet.Thumbnails.Standard, np.Items[0].Snippet.Thumbnails.Default} {
 				if i != nil {
 					thumbnailURL = i.Url
 					break
@@ -415,13 +415,13 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 
 			log.Debugf("Thumbnail: %v", thumbnailURL)
 			discord.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
-				Title:       np.Snippet.Title,
+				Title:       np.Items[0].Snippet.Title,
 				Image:       &discordgo.MessageEmbedImage{URL: thumbnailURL},
-				Description: np.Snippet.Description,
+				Description: np.Items[0].Snippet.Description,
 				Author:      &discordgo.MessageEmbedAuthor{},
 				Color:       rand.Intn(16777215), // rand
 				Fields:      fields,
-				URL:         fmt.Sprintf("http://youtu.be/%v", np.Id.VideoId),
+				URL:         fmt.Sprintf("http://youtu.be/%v", np.Items[0].Id),
 				Timestamp:   time.Now().Format(time.RFC3339)}) // Discord wants ISO8601; RFC3339 is an extension of ISO8601 and should be completely compatible.
 		}
 	case "playtop", "pt", "playnext", "pn":
@@ -451,7 +451,7 @@ func returnPlaylist(input string) ([]string, error) {
 	}
 
 	// Make the API call to YouTube.
-	call := service.Search.List("id,snippet").
+	call := service.Search.List("id").
 		Q(input).
 		MaxResults(1)
 	response, err := call.Do()
@@ -462,7 +462,8 @@ func returnPlaylist(input string) ([]string, error) {
 	var result *youtube.SearchResult
 	for _, i := range response.Items {
 		if i.Id.Kind == "youtube#playlist" {
-			youtubeSearchCache[input] = i
+			// this is cheap enough for now to not bother with cache
+			//youtubeSearchCache[input] = i
 			result = i
 		}
 	}
@@ -488,7 +489,7 @@ func returnPlaylist(input string) ([]string, error) {
 
 		// this is stupid and will max out my quota. Too bad!
 		// This also doesnt work always, but I dont have the energy to make it better.
-		sr, err := searchForVideo("youtu.be/" + i.Snippet.ResourceId.VideoId)
+		sr, err := getVideoInfo(i.Snippet.ResourceId.VideoId, service)
 		//fmt.Printf("%+v", i)
 		if err != nil {
 			log.Errorln(err)
@@ -503,7 +504,14 @@ func returnPlaylist(input string) ([]string, error) {
 
 }
 
-func searchForVideo(input string) (*youtube.SearchResult, error) {
+// doesnt get suggestions because this joke of an API is too damn expensive
+func getVideoInfo(result string, service *youtube.Service) (*youtube.VideoListResponse, error) {
+	vidService := youtube.NewVideosService(service)
+
+	return vidService.List("snipped,id").Id(result).Do()
+}
+
+func searchForVideo(input string) (*youtube.VideoListResponse, error) {
 
 	// sloppy way of keeping my quota intact
 	if val, ok := youtubeSearchCache[input]; ok {
@@ -520,7 +528,8 @@ func searchForVideo(input string) (*youtube.SearchResult, error) {
 	// Each one of these API quotas costs me 100 quota points
 	// I shouldnt have to pay that much for a goddamn search
 	// this will max out my quota, too bad!
-	call := service.Search.List("id,snippet").
+	// ^ doesnt apply if I dont use snippet, see below
+	call := service.Search.List("id").
 		Q(input).
 		MaxResults(3)
 	response, err := call.Do()
@@ -534,8 +543,14 @@ func searchForVideo(input string) (*youtube.SearchResult, error) {
 
 	for _, i := range response.Items {
 		if i.Id.Kind == "youtube#video" {
-			youtubeSearchCache[input] = i
-			return i, nil
+			// this is f-ing stupid, but I need it to process enough videos.
+			vid, err := getVideoInfo(i.Id.VideoId, service)
+			if err != nil {
+				log.Errorln(err)
+				continue
+			}
+			youtubeSearchCache[input] = vid
+			return vid, nil
 		}
 	}
 
