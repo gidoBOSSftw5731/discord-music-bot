@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -48,6 +49,10 @@ var (
 	youtubeSearchCache = make(map[string]*youtube.VideoListResponse)
 	// ytdlCache takes a path to a downloaded video and returns it's youtube search results
 	ytdlCache = make(map[string]*youtube.VideoListResponse)
+	// This is a mess, thanks eyecatchUp on Stackoverflow for doing this
+	// https://stackoverflow.com/questions/2964678/jquery-youtube-url-validation-with-regex/10315969#10315969
+	youtubeURLRegex = regexp.MustCompile(
+		`(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?`)
 	//testing   = false // please make this false on prod, please
 )
 
@@ -508,7 +513,7 @@ func returnPlaylist(input string) ([]string, error) {
 func getVideoInfo(result string, service *youtube.Service) (*youtube.VideoListResponse, error) {
 	vidService := youtube.NewVideosService(service)
 
-	return vidService.List("snipped,id").Id(result).Do()
+	return vidService.List("snippet,id").Id(result).Do()
 }
 
 func searchForVideo(input string) (*youtube.VideoListResponse, error) {
@@ -525,11 +530,15 @@ func searchForVideo(input string) (*youtube.VideoListResponse, error) {
 		return nil, err
 	}
 
+	if youtubeURLRegex.MatchString(input) {
+		log.Debugln("The input is a URL! Yay for cheap!")
+		return getVideoInfo(youtubeURLRegex.FindAllStringSubmatch(input, 2)[0][1], service)
+	}
+
 	// Each one of these API quotas costs me 100 quota points
 	// I shouldnt have to pay that much for a goddamn search
 	// this will max out my quota, too bad!
-	// ^ doesnt apply if I dont use snippet, see below
-	call := service.Search.List("id").
+	call := service.Search.List("").
 		Q(input).
 		MaxResults(3)
 	response, err := call.Do()
