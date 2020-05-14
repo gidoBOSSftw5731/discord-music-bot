@@ -138,6 +138,7 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 		case !addtotop || len(queue[message.GuildID]) == 0:
 			queue[message.GuildID] = append(queue[message.GuildID], fpaths...)
 		case addtotop:
+			// this is probably the worst way to do this, but it's what I have to do
 			queue[message.GuildID] = append([]string{queue[message.GuildID][0]},
 				append(fpaths, queue[message.GuildID][1:]...)...)
 		}
@@ -175,6 +176,7 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 	discord.ChannelMessageDelete(msg.ChannelID, msg.ID)
 
 	isPlayingInServer := playingMap[message.GuildID]
+	// this should be an if statement since I no longer have a true
 	switch isPlayingInServer {
 	case false:
 		loopMap[message.GuildID] = false
@@ -326,7 +328,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			Title:       "How to use:",
 			Description: fmt.Sprintf("All commands must be prefixed by the bot prefix: %v", Config.Prefix),
 			Author:      &discordgo.MessageEmbedAuthor{},
-			Color:       rand.Intn(16777215), // Green
+			Color:       rand.Intn(16777215), // random (I know this says green somewhere, it isnt)
 			Fields:      fields,
 			Timestamp:   time.Now().Format(time.RFC3339)}) // Discord wants ISO8601; RFC3339 is an extension of ISO8601 and should be completely compatible.
 	case "leave", "disconnect", "d", "dc", "die":
@@ -392,6 +394,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			discord.ChannelMessageSend(message.ChannelID, "Nothing in the queue")
 		default:
 			np := ytdlCache[queue[message.GuildID][0]]
+			// there definitely could never be bad data, it could never happen
 			ptime, _ := time.Parse(time.RFC3339, np.Snippet.PublishedAt)
 			fields := []*discordgo.MessageEmbedField{
 				&discordgo.MessageEmbedField{
@@ -400,7 +403,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				}}
 
 			var thumbnailURL string
-			//apparently some thumbnails are nil
+			//apparently some thumbnails are nil, this is dumb
 			for _, i := range []*youtube.Thumbnail{np.Snippet.Thumbnails.Maxres,
 				np.Snippet.Thumbnails.High, np.Snippet.Thumbnails.Medium, np.Snippet.Thumbnails.Standard,
 				np.Snippet.Thumbnails.Default} {
@@ -484,6 +487,7 @@ func returnPlaylist(input string) ([]string, error) {
 		out, _ := dlToTmp(i.Snippet.ResourceId.VideoId)
 
 		// this is stupid and will max out my quota. Too bad!
+		// This also doesnt work always, but I dont have the energy to make it better.
 		sr, err := searchForVideo("youtu.be/" + i.Snippet.ResourceId.VideoId)
 		//fmt.Printf("%+v", i)
 		if err != nil {
@@ -501,6 +505,7 @@ func returnPlaylist(input string) ([]string, error) {
 
 func searchForVideo(input string) (*youtube.SearchResult, error) {
 
+	// sloppy way of keeping my quota intact
 	if val, ok := youtubeSearchCache[input]; ok {
 		log.Traceln("Getting search from cache (yay!)")
 		return val, nil
@@ -512,7 +517,9 @@ func searchForVideo(input string) (*youtube.SearchResult, error) {
 		return nil, err
 	}
 
-	// Make the API call to YouTube.
+	// Each one of these API quotas costs me 100 quota points
+	// I shouldnt have to pay that much for a goddamn search
+	// this will max out my quota, too bad!
 	call := service.Search.List("id,snippet").
 		Q(input).
 		MaxResults(3)
