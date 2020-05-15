@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -34,6 +36,7 @@ var Config = struct {
 	GoogleDeveloperKey string `required:"true" json:"googleDeveloperKey"`
 	DiscordBotToken    string `required:"true" json:"discordBotToken"`
 	Prefix             string `default:"**" json:"prefix"`
+	GeniusToken        string `default:"" json:"geniusToken"`
 	googleDeveloperKey string
 	prefix             string
 	discordBotToken    string
@@ -57,7 +60,7 @@ var (
 		`(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?`)
 	//testing   = false // please make this false on prod, please
 	// we dont use genius because I cba to add it to the config
-	lyricProvider = lyrics.New()
+	lyricProvider lyrics.Lyric
 )
 
 func main() {
@@ -111,7 +114,7 @@ func findUserVoiceState(session *discordgo.Session, userid string) (*discordgo.V
 }
 
 func removeFromSlice(slice []string, s int) []string {
-	if len(slice) == 1 {
+	if len(slice) < 2 {
 		var newSlice []string
 		return newSlice
 	}
@@ -445,13 +448,69 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			np := ytdlCache[queue[message.GuildID][0]]
 
 			//no one could ever play music from someone who isnt the artist
-			l, err := lyricProvider.Search(np.Items[0].Snippet.ChannelTitle, np.Items[0].Snippet.Title)
-			if err != nil {
-				discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Error getting lyrics: %v", err))
-				return
+
+			channel := np.Items[0].Snippet.ChannelTitle
+			for _, i := range []string{"VEVO", "- Topic"} {
+				channel = strings.TrimSuffix(channel, i)
 			}
 
-			discord.ChannelMessageSend(message.ChannelID, l)
+			title := np.Items[0].Snippet.Title
+			if (strings.Contains(title, "-") || strings.Contains(title, "|")) && len(title)-2 >= len(channel) {
+
+				switch {
+				case strings.HasPrefix(strings.ToLower(title), strings.ToLower(channel)):
+					title = title[len(channel)+2:]
+				case strings.HasSuffix(strings.ToLower(title), strings.ToLower(channel)):
+					title = title[:len(channel)-2]
+				}
+			}
+			log.Debugf("Lyrics for %v by %v", title, channel)
+			l, err := lyricProvider.Search(channel, title)
+			if err != nil {
+				discord.ChannelMessageSend(message.ChannelID,
+					fmt.Sprintf("Error getting lyrics, wont try from youtube because their API is garbage: %v", err))
+				// I'll do youtube queries if I get more quota
+				/*	ctx := context.Background()
+					service, err := youtube.NewService(ctx, option.WithAPIKey(Config.googleDeveloperKey))
+					if err != nil {
+						discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Error: %v", err))
+						return
+					}
+
+					resp, err := service.Captions.Download(np.Items[0].Id).Context(ctx).Download()
+					if err != nil {
+						discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Error: %v", err))
+						return
+					}
+
+					log.Debugln(resp.Body)*/
+			}
+
+			if len(l) < 1900 {
+				discord.ChannelMessageSend(message.ChannelID, l)
+			} else {
+				buf := bytes.NewReader([]byte(l))
+				r := bufio.NewScanner(buf)
+				r.Split(bufio.ScanLines)
+
+				var txtlines []string
+
+				for r.Scan() {
+					txtlines = append(txtlines, r.Text())
+				}
+
+				var msg string
+				for _, eachline := range txtlines {
+					msg += fmt.Sprintln(eachline)
+					if len(msg) > 1900 {
+						discord.ChannelMessageSend(message.ChannelID, msg)
+						msg = ""
+					}
+				}
+				if msg != "" {
+					discord.ChannelMessageSend(message.ChannelID, msg)
+				}
+			}
 		}
 
 	}
@@ -635,6 +694,8 @@ func setup() {
 	Config.googleDeveloperKey = Config.GoogleDeveloperKey
 	Config.prefix = Config.Prefix
 	Config.discordBotToken = Config.DiscordBotToken
+
+	lyricProvider = lyrics.New(lyrics.WithGeniusLyrics(Config.GeniusToken))
 
 	//println(Config.googleDeveloperKey)
 
