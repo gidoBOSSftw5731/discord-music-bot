@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	lyrics "github.com/rhnvrm/lyric-api-go"
+
 	"google.golang.org/api/option"
 
 	"github.com/BrianAllred/goydl"
@@ -54,6 +56,8 @@ var (
 	youtubeURLRegex = regexp.MustCompile(
 		`(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?`)
 	//testing   = false // please make this false on prod, please
+	// we dont use genius because I cba to add it to the config
+	lyricProvider = lyrics.New()
 )
 
 func main() {
@@ -431,6 +435,24 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		}
 	case "playtop", "pt", "playnext", "pn":
 		commandPlay(discord, message, command, commandContents, true)
+	case "lyrics":
+		switch {
+		case queue[message.GuildID] == nil:
+			discord.ChannelMessageSend(message.ChannelID, "No queue for this server")
+		case len(queue[message.GuildID]) == 0:
+			discord.ChannelMessageSend(message.ChannelID, "Nothing in the queue")
+		default:
+			np := ytdlCache[queue[message.GuildID][0]]
+
+			//no one could ever play music from someone who isnt the artist
+			l, err := lyricProvider.Search(np.Items[0].Snippet.ChannelTitle, np.Items[0].Snippet.Title)
+			if err != nil {
+				discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Error getting lyrics: %v", err))
+				return
+			}
+
+			discord.ChannelMessageSend(message.ChannelID, l)
+		}
 
 	}
 }
