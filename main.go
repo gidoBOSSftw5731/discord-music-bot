@@ -538,7 +538,7 @@ func searchForVideo(input string) (*youtube.VideoListResponse, error) {
 	// Each one of these API quotas costs me 100 quota points
 	// I shouldnt have to pay that much for a goddamn search
 	// this will max out my quota, too bad!
-	call := service.Search.List("").
+	call := service.Search.List("id").
 		Q(input).
 		MaxResults(3)
 	response, err := call.Do()
