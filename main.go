@@ -470,8 +470,8 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			// even ban from the server
 			return
 		}
-		banList[message.GuildID] = append(banList[message.GuildID], commandContents[1])
-		log.Traceln("Banned '", commandContents[1], "'")
+		banList[message.GuildID] = append(banList[message.GuildID], commandContents[1][1:len(commandContents[1])-2])
+		log.Traceln("Banned '", commandContents[1][1:len(commandContents[1])-2], "'")
 	case "unban":
 		if message.Author.ID != botOwner || len(commandContents) != 2 {
 			// return silently as to stay hidden
