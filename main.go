@@ -281,9 +281,11 @@ func stringInSlice(a string, list []string) bool {
 
 func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	if message.Content == "" || len(message.Content) < len(Config.prefix) ||
-		stringInSlice(fmt.Sprintf(" %v ", message.Author.ID), banList[message.GuildID]) {
+		stringInSlice(message.Author.ID, banList[message.GuildID]) {
 		return
 	}
+	log.Tracef("UserID: %v, is banned: %v, banlist: %v",
+		message.Author.ID, stringInSlice(message.Author.ID, banList[message.GuildID]), banList[message.GuildID])
 	if message.Content[:len(Config.Prefix)] != Config.Prefix ||
 		len(strings.Split(message.Content, Config.prefix)) < 2 {
 		return
@@ -470,8 +472,8 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			// even ban from the server
 			return
 		}
-		banList[message.GuildID] = append(banList[message.GuildID], commandContents[1][1:len(commandContents[1])-2])
-		log.Tracef("Banned '", commandContents[1][1:len(commandContents[1])-2], "'")
+		banList[message.GuildID] = append(banList[message.GuildID], commandContents[1])
+		log.Trace("Banned '", commandContents[1], "'")
 	case "unban":
 		if message.Author.ID != botOwner || len(commandContents) != 2 {
 			// return silently as to stay hidden
