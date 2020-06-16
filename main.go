@@ -233,9 +233,10 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 						ytdlCache[fpath].Items[0].Snippet.Title, ytdlCache[fpath].Items[0].Id))
 				}
 
-				if time.Now().Add(24 * time.Hour).After(startTimeMap[message.GuildID]) {
+				if time.Now().Add(24 * time.Hour).Before(startTimeMap[message.GuildID]) {
 					discord.ChannelMessageSend(message.ChannelID,
 						"Leaving since it has been 24 hours.")
+					break
 				}
 
 				stopMap[vs.GuildID] = make(chan bool)
@@ -257,7 +258,7 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 		}
 		playingMap[vs.GuildID] = false
 		// clear queue for safety
-		queue[message.GuildID] = []string{}
+		queue[vs.GuildID] = []string{}
 		if dgv == nil {
 			break
 		}
@@ -494,7 +495,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			//no one could ever play music from someone who isnt the artist
 
 			channel := np.Items[0].Snippet.ChannelTitle
-			for _, i := range []string{"VEVO", "- Topic"} {
+			for _, i := range []string{"VEVO", "- Topic", "(Video)", "(Official Video)", "M/V"} {
 				channel = strings.TrimSuffix(channel, i)
 			}
 
