@@ -281,7 +281,7 @@ func stringInSlice(a string, list []string) bool {
 
 func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	if message.Content == "" || len(message.Content) < len(Config.prefix) ||
-		stringInSlice(message.Author.ID, banList[message.GuildID]) {
+		stringInSlice(fmt.Sprintf(" %v ", message.Author.ID), banList[message.GuildID]) {
 		return
 	}
 	if message.Content[:len(Config.Prefix)] != Config.Prefix ||
