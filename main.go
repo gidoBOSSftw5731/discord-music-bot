@@ -30,6 +30,8 @@ const (
 	subdir = "audios"
 	//viddir       = "videos" // unneeded due to move to ydl
 	youtubeChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+	// my user ID (dont @ me) for admin commands like ban
+	botOwner = "181965297249550336"
 )
 
 var Config = struct {
@@ -43,13 +45,17 @@ var Config = struct {
 }{}
 
 var (
-	tmpdir       string
-	playingMap   = make(map[string]bool)
-	queue        = make(map[string][]string)
+	tmpdir     string
+	playingMap = make(map[string]bool)
+	queue      = make(map[string][]string)
+	// banList is made to allow users to be banned by the owner of the bot
+	// all this does is takes the guild ID and their ID and stores it
+	banList      = make(map[string][]string)
 	connMap      = make(map[string]*discordgo.VoiceConnection)
 	loopMap      = make(map[string]bool)
 	loopQueueMap = make(map[string]bool)
 	stopMap      = make(map[string]chan bool)
+	startTimeMap = make(map[string]time.Time)
 	// youtubeSearchCache takes a youtube search and returns its search results
 	youtubeSearchCache = make(map[string]*youtube.VideoListResponse)
 	// ytdlCache takes a path to a downloaded video and returns it's youtube search results
@@ -188,6 +194,7 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 	discord.ChannelMessageDelete(msg.ChannelID, msg.ID)
 
 	isPlayingInServer := playingMap[message.GuildID]
+	startTimeMap[message.GuildID] = time.Now()
 	// this should be an if statement since I no longer have a true
 	switch isPlayingInServer {
 	case false:
@@ -226,6 +233,11 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 						ytdlCache[fpath].Items[0].Snippet.Title, ytdlCache[fpath].Items[0].Id))
 				}
 
+				if time.Now().Add(24 * time.Hour).After(startTimeMap[message.GuildID]) {
+					discord.ChannelMessageSend(message.ChannelID,
+						"Leaving since it has been 24 hours.")
+				}
+
 				stopMap[vs.GuildID] = make(chan bool)
 				dgvoice.PlayAudioFile(dgv, fpath, stopMap[vs.GuildID])
 				if !loopMap[vs.GuildID] && !loopQueueMap[vs.GuildID] {
@@ -239,24 +251,36 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 				if !attemptedtoleave {
 					attemptedtoleave = true
 					time.Sleep(time.Second * 5)
-					continue
-				}
-
-				playingMap[vs.GuildID] = false
-				if dgv == nil {
 					break
 				}
-				dgv.Disconnect()
-				//dgv.Unlock()
 			}
 		}
+		playingMap[vs.GuildID] = false
+		// clear queue for safety
+		queue[message.GuildID] = []string{}
+		if dgv == nil {
+			break
+		}
+
+		dgv.Disconnect()
+		//dgv.Unlock()
 
 	}
 
 }
 
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
 func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate) {
-	if message.Content == "" || len(message.Content) < len(Config.prefix) {
+	if message.Content == "" || len(message.Content) < len(Config.prefix) ||
+		stringInSlice(message.Author.ID, banList[message.GuildID]) {
 		return
 	}
 	if message.Content[:len(Config.Prefix)] != Config.Prefix ||
@@ -373,7 +397,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 	case "skip", "s", "S":
 		stopMap[message.GuildID] <- true
 		discord.ChannelMessageSend(message.ChannelID, "skipped")
-	case "remove":
+	case "remove", "rm":
 		if len(command) < 2 {
 			log.Errorln("No command sent")
 			return
@@ -398,7 +422,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		queue[message.GuildID] = unique(queue[message.GuildID])
 
 		discord.ChannelMessageSend(message.ChannelID, "Removed dupes")
-	case "np", "nowplaying", "whatsplaying", "playing":
+	case "np", "nowplaying", "whatsplaying", "playing", "whatisupmydude":
 		switch {
 		case queue[message.GuildID] == nil:
 			discord.ChannelMessageSend(message.ChannelID, "No queue for this server")
@@ -429,7 +453,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			discord.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
 				Title:       np.Items[0].Snippet.Title,
 				Image:       &discordgo.MessageEmbedImage{URL: thumbnailURL},
-				Description: np.Items[0].Snippet.Description,
+				Description: fmt.Sprintf("%.300v...", np.Items[0].Snippet.Description),
 				Author:      &discordgo.MessageEmbedAuthor{},
 				Color:       rand.Intn(16777215), // rand
 				Fields:      fields,
@@ -438,6 +462,26 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		}
 	case "playtop", "pt", "playnext", "pn":
 		commandPlay(discord, message, command, commandContents, true)
+	case "ban":
+		if message.Author.ID != botOwner || len(commandContents) != 2 {
+			// return silently as to stay hidden
+			// this doesnt ban permanently or
+			// even ban from the server
+			return
+		}
+		banList[message.GuildID] = append(banList[message.GuildID], commandContents[1])
+	case "unban":
+		if message.Author.ID != botOwner || len(commandContents) != 2 {
+			// return silently as to stay hidden
+			// this doesnt ban permanently or
+			// even ban from the server
+			return
+		}
+		for j, i := range banList[message.GuildID] {
+			if i == commandContents[1] {
+				banList[message.GuildID] = removeFromSlice(banList[message.GuildID], j)
+			}
+		}
 	case "lyrics":
 		switch {
 		case queue[message.GuildID] == nil:
