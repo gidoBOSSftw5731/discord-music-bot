@@ -383,7 +383,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			log.Errorln(err)
 			return
 		}
-		if n > len(queue[message.GuildID]) || n < 0 {
+		if n >= len(queue[message.GuildID]) || n < 0 {
 			discord.ChannelMessageSend(message.ChannelID, "Out of range")
 			return
 		}
