@@ -284,8 +284,8 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		stringInSlice(message.Author.ID, banList[message.GuildID]) {
 		return
 	}
-	log.Tracef("UserID: %v, is banned: %v, banlist: %v",
-		message.Author.ID, stringInSlice(message.Author.ID, banList[message.GuildID]), banList[message.GuildID])
+	//log.Tracef("UserID: %v, is banned: %v, banlist: %v",
+	//	message.Author.ID, stringInSlice(message.Author.ID, banList[message.GuildID]), banList[message.GuildID])
 	if message.Content[:len(Config.Prefix)] != Config.Prefix ||
 		len(strings.Split(message.Content, Config.prefix)) < 2 {
 		return
