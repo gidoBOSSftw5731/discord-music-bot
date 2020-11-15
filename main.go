@@ -703,7 +703,7 @@ func dlToTmp(url string) (string, error) {
 	//make slice of ID  for file saving purposes
 	idSplit := strings.Split(url, "")
 
-	fpath := filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.mp3", url))
+	fpath := filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.opus", url))
 	log.Traceln(fpath)
 
 	if _, err := os.Stat(fpath); err == nil {
@@ -711,19 +711,23 @@ func dlToTmp(url string) (string, error) {
 		return fpath, nil
 	}
 	// set options
-	youtubeDl.Options.Output.Value = filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.mp3", url))
+	youtubeDl.Options.Output.Value = filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.%%(ext)s", url))
 	youtubeDl.Options.ExtractAudio.Value = true
-	youtubeDl.Options.AudioFormat.Value = "mp3"
+	youtubeDl.Options.AudioFormat.Value = "opus"
 	youtubeDl.Options.KeepVideo = goydl.BoolOption{Value: false} // why is this a thing
-	//	youtubeDl.Options.AudioQuality = goydl.StringOption{Value: "0"}
+//	youtubeDl.Options.AudioQuality = goydl.StringOption{Value: "0"}
 
 	youtubeDl.VideoURL = fmt.Sprintf("www.youtube.com/watch?v=%v", url)
 	// listen to errors from ydl
-	//	go io.Copy(os.Stdout, youtubeDl.Stdout)
-	//	go io.Copy(os.Stderr, youtubeDl.Stderr)
+//		go io.Copy(os.Stdout, youtubeDl.Stdout)
+//		go io.Copy(os.Stderr, youtubeDl.Stderr)
+
+	log.Traceln(youtubeDl.Info)
 
 	dwnld, err := youtubeDl.Download()
+	//panic("testing download error")
 	if err != nil {
+//		log.Debugf("Path: %v", dwnld.Path)
 		return "", err
 	}
 	dwnld.Wait()
