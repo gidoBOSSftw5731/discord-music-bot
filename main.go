@@ -293,6 +293,11 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 
 	log.Debugln("prefix found")
 
+	// false = normal true = debug
+	if false && message.Author.ID != botOwner {
+		return
+	}
+
 	command := strings.Split(message.Content, Config.Prefix)[1]
 	commandContents := strings.Split(message.Content, " ") // 0 = *command, 1 = first arg, etc
 
@@ -401,7 +406,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		stopMap[message.GuildID] <- true
 		discord.ChannelMessageSend(message.ChannelID, "skipped")
 	case "remove", "rm":
-		if len(command) < 2 {
+		if len(commandContents) != 2 {
 			log.Errorln("No command sent")
 			return
 		}
@@ -703,7 +708,7 @@ func dlToTmp(url string) (string, error) {
 	//make slice of ID  for file saving purposes
 	idSplit := strings.Split(url, "")
 
-	fpath := filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.opus", url))
+	fpath := filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.mp3", url))
 	log.Traceln(fpath)
 
 	if _, err := os.Stat(fpath); err == nil {
@@ -713,21 +718,21 @@ func dlToTmp(url string) (string, error) {
 	// set options
 	youtubeDl.Options.Output.Value = filepath.Join(tmpdir, subdir, idSplit[0], idSplit[1], fmt.Sprintf("%v.%%(ext)s", url))
 	youtubeDl.Options.ExtractAudio.Value = true
-	youtubeDl.Options.AudioFormat.Value = "opus"
+	youtubeDl.Options.AudioFormat.Value = "mp3"
 	youtubeDl.Options.KeepVideo = goydl.BoolOption{Value: false} // why is this a thing
-//	youtubeDl.Options.AudioQuality = goydl.StringOption{Value: "0"}
+	//	youtubeDl.Options.AudioQuality = goydl.StringOption{Value: "0"}
 
 	youtubeDl.VideoURL = fmt.Sprintf("www.youtube.com/watch?v=%v", url)
 	// listen to errors from ydl
-//		go io.Copy(os.Stdout, youtubeDl.Stdout)
-//		go io.Copy(os.Stderr, youtubeDl.Stderr)
+	//		go io.Copy(os.Stdout, youtubeDl.Stdout)
+	//		go io.Copy(os.Stderr, youtubeDl.Stderr)
 
 	log.Traceln(youtubeDl.Info)
 
 	dwnld, err := youtubeDl.Download()
 	//panic("testing download error")
 	if err != nil {
-//		log.Debugf("Path: %v", dwnld.Path)
+		//		log.Debugf("Path: %v", dwnld.Path)
 		return "", err
 	}
 	dwnld.Wait()
