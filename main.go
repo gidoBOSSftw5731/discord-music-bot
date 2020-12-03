@@ -249,24 +249,24 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 				dgvoice.PlayAudioFile(dgv, fpath, stopMap[vs.GuildID], endTime, starttime, false)
 
 				if pausedMap[vs.GuildID] {
-				select {
-				case currenttime, ok := <-endTime:
-					if !ok {
-continue
-}
-currenttime += starttime
-					log.Traceln("Pausing Song at ", currenttime)
-					discord.ChannelMessageSend(message.ChannelID,
-						fmt.Sprintf("Paused at %v", currenttime))
-					pausedMap[vs.GuildID] = false
-					// wait for resume
-					<-stopMap[vs.GuildID]
-					starttime = currenttime
-					log.Traceln("Resetting loop to:", starttime)
-					continue PlayingLoop
-				default:
+					select {
+					case currenttime, ok := <-endTime:
+						if !ok {
+							continue
+						}
+						currenttime += starttime
+						log.Traceln("Pausing Song at ", currenttime)
+						discord.ChannelMessageSend(message.ChannelID,
+							fmt.Sprintf("Paused at %v", currenttime))
+						pausedMap[vs.GuildID] = false
+						// wait for resume
+						<-stopMap[vs.GuildID]
+						starttime = currenttime
+						log.Traceln("Resetting loop to:", starttime)
+						continue PlayingLoop
+					default:
+					}
 				}
-		}
 				if !loopMap[vs.GuildID] && !loopQueueMap[vs.GuildID] {
 					queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
 				} else if loopQueueMap[vs.GuildID] {
