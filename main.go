@@ -19,8 +19,8 @@ import (
 	"google.golang.org/api/option"
 
 	"github.com/BrianAllred/goydl"
-	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
+	"github.com/gidoBOSSftw5731/dgvoice"
 	"github.com/gidoBOSSftw5731/log"
 	"github.com/jinzhu/configor"
 	"google.golang.org/api/youtube/v3"
@@ -56,6 +56,8 @@ var (
 	loopQueueMap = make(map[string]bool)
 	stopMap      = make(map[string]chan bool)
 	startTimeMap = make(map[string]time.Time)
+	// if a server is paused or skipped
+	pausedMap = make(map[string]bool)
 	// youtubeSearchCache takes a youtube search and returns its search results
 	youtubeSearchCache = make(map[string]*youtube.VideoListResponse)
 	// ytdlCache takes a path to a downloaded video and returns it's youtube search results
@@ -222,7 +224,9 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 		playingMap[vs.GuildID] = true
 
 		//queue[vs.GuildID] = []string{fpath}
+		starttime := float64(0)
 
+	PlayingLoop:
 		for playingMap[vs.GuildID] {
 
 			if len(queue[vs.GuildID]) != 0 {
@@ -233,14 +237,30 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 						ytdlCache[fpath].Items[0].Snippet.Title, ytdlCache[fpath].Items[0].Id))
 				}
 
-				if time.Now().Add(24 * time.Hour).Before(startTimeMap[message.GuildID]) {
+				if time.Now().Add(10 * time.Hour).Before(startTimeMap[message.GuildID]) {
 					discord.ChannelMessageSend(message.ChannelID,
-						"Leaving since it has been 24 hours.")
+						"Leaving since it has been 10 hours.")
 					break
 				}
 
+				log.Traceln("Starting Song at ", starttime)
 				stopMap[vs.GuildID] = make(chan bool)
-				dgvoice.PlayAudioFile(dgv, fpath, stopMap[vs.GuildID])
+				endTime := make(chan float64)
+				dgvoice.PlayAudioFile(dgv, fpath, stopMap[vs.GuildID], endTime, starttime, false)
+
+				if currenttime, ok := <-endTime; ok && pausedMap[vs.GuildID] {
+					currenttime += starttime
+					log.Traceln("Pausing Song at ", currenttime)
+					discord.ChannelMessageSend(message.ChannelID,
+						fmt.Sprintf("Paused at %v", currenttime))
+					pausedMap[vs.GuildID] = false
+					// wait for resume
+					<-stopMap[vs.GuildID]
+					starttime = currenttime
+					log.Traceln("Resetting loop to:", starttime)
+					continue PlayingLoop
+				}
+
 				if !loopMap[vs.GuildID] && !loopQueueMap[vs.GuildID] {
 					queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
 				} else if loopQueueMap[vs.GuildID] {
@@ -248,6 +268,7 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 						fpath)
 
 				}
+				starttime = 0
 			} else { // yes I am using else, sue me
 				if !attemptedtoleave {
 					attemptedtoleave = true
@@ -295,6 +316,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 
 	// false = normal true = debug
 	if false && message.Author.ID != botOwner {
+		log.Debugln("Debug mode enabled, owner only can use")
 		return
 	}
 
@@ -491,6 +513,11 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				banList[message.GuildID] = removeFromSlice(banList[message.GuildID], j)
 			}
 		}
+	case "pause":
+		pausedMap[message.GuildID] = true
+		stopMap[message.GuildID] <- true
+	case "resume":
+		stopMap[message.GuildID] <- false
 	case "lyrics":
 		switch {
 		case queue[message.GuildID] == nil:
