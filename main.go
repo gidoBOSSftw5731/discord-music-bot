@@ -248,8 +248,13 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 				endTime := make(chan float64)
 				dgvoice.PlayAudioFile(dgv, fpath, stopMap[vs.GuildID], endTime, starttime, false)
 
-				if currenttime, ok := <-endTime; ok && pausedMap[vs.GuildID] {
-					currenttime += starttime
+				if !pausedMap[vs.GuildID] {
+				select {
+				case currenttime, ok := <-endTime:
+					if !ok {
+continue
+}
+currenttime += starttime
 					log.Traceln("Pausing Song at ", currenttime)
 					discord.ChannelMessageSend(message.ChannelID,
 						fmt.Sprintf("Paused at %v", currenttime))
@@ -259,8 +264,9 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 					starttime = currenttime
 					log.Traceln("Resetting loop to:", starttime)
 					continue PlayingLoop
+				default:
 				}
-
+		}
 				if !loopMap[vs.GuildID] && !loopQueueMap[vs.GuildID] {
 					queue[vs.GuildID] = removeFromSlice(queue[vs.GuildID], 0)
 				} else if loopQueueMap[vs.GuildID] {
