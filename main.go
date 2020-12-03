@@ -248,7 +248,7 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 				endTime := make(chan float64)
 				dgvoice.PlayAudioFile(dgv, fpath, stopMap[vs.GuildID], endTime, starttime, false)
 
-				if !pausedMap[vs.GuildID] {
+				if pausedMap[vs.GuildID] {
 				select {
 				case currenttime, ok := <-endTime:
 					if !ok {
