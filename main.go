@@ -4,17 +4,18 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	lyrics "github.com/rhnvrm/lyric-api-go"
 
 	"google.golang.org/api/option"
 
@@ -34,10 +35,17 @@ const (
 	botOwner = "181965297249550336"
 )
 
+//Lyrics parses the json for the lyrics
+type Lyrics struct {
+	Title  string `json:"title"`
+	Author string `json:"author"`
+	Lyrics string `json:"lyrics"`
+}
+
 var Config = struct {
 	GoogleDeveloperKey string `required:"true" json:"googleDeveloperKey"`
 	DiscordBotToken    string `required:"true" json:"discordBotToken"`
-	Prefix             string `default:"**" json:"prefix"`
+	Prefix             string `default:"*" json:"prefix"`
 	GeniusToken        string `default:"" json:"geniusToken"`
 	googleDeveloperKey string
 	prefix             string
@@ -66,9 +74,6 @@ var (
 	// https://stackoverflow.com/questions/2964678/jquery-youtube-url-validation-with-regex/10315969#10315969
 	youtubeURLRegex = regexp.MustCompile(
 		`(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?`)
-	//testing   = false // please make this false on prod, please
-	// we dont use genius because I cba to add it to the config
-	lyricProvider lyrics.Lyric
 )
 
 func main() {
@@ -387,8 +392,11 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 				Name:  "Play next",
 				Value: "playnext: (alias playtop) play a song next, dont skip to it though"},
 			&discordgo.MessageEmbedField{
+				Name:  "Get Lyrics",
+				Value: "lyrics: Get's lyrics from \"The Internet\" for either the current song playing, or the name of the song if provided in the command"},
+			&discordgo.MessageEmbedField{
 				Name:  "Extra commands",
-				Value: "If there is a command not listed here, check the rythm help list: https://rythmbot.co/features#list"},
+				Value: "If there is a command not listed here, check the rythm help list, some commands are unfinished or just for testing: https://rythmbot.co/features#list"},
 			&discordgo.MessageEmbedField{
 				Name:  "Invite this bot to other servers",
 				Value: "Invite URL: https://discord.com/api/oauth2/authorize?client_id=581249727958351891&permissions=37054784&scope=bot"},
@@ -406,10 +414,11 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 	case "leave", "disconnect", "d", "dc", "die":
 		if val, ok := connMap[message.GuildID]; ok &&
 			playingMap[message.GuildID] {
+			discord.ChannelMessageSend(message.ChannelID, "Leaving")
 			queue[message.GuildID] = []string{}
 			playingMap[message.GuildID] = false
 			val.Disconnect()
-			discord.ChannelMessageSend(message.ChannelID, "Leaving")
+			stopMap[message.GuildID] <- true
 		} else {
 			discord.ChannelMessageSend(message.ChannelID, "Not in a channel :(")
 		}
@@ -524,81 +533,166 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 		stopMap[message.GuildID] <- true
 	case "resume":
 		stopMap[message.GuildID] <- false
+	case "fix":
+		if message.Author.ID != botOwner || len(commandContents) != 2 {
+			// return silently as to stay hidden
+			return
+		}
+		delete(ytdlCache, commandContents[1])
+		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf(
+			"Removed song with url %v", commandContents[0]))
 	case "lyrics":
-		switch {
-		case queue[message.GuildID] == nil:
-			discord.ChannelMessageSend(message.ChannelID, "No queue for this server")
-		case len(queue[message.GuildID]) == 0:
-			discord.ChannelMessageSend(message.ChannelID, "Nothing in the queue")
-		default:
-			np := ytdlCache[queue[message.GuildID][0]]
+		getLyrics(discord, message, command, commandContents)
+	}
+}
 
-			//no one could ever play music from someone who isnt the artist
+//getLyrics get's the lyrics the user requested and prints them to the chat
+//yes, it's a bit long. I know.
+func getLyrics(discord *discordgo.Session, message *discordgo.MessageCreate,
+	command string, commandContents []string) {
+	var song string
 
-			channel := np.Items[0].Snippet.ChannelTitle
-			for _, i := range []string{"VEVO", "- Topic", "(Video)", "(Official Video)", "M/V"} {
-				channel = strings.TrimSuffix(channel, i)
-			}
+	switch {
+	case len(commandContents) >= 2:
+		song = url.QueryEscape(strings.Join(commandContents[1:], " "))
+	case queue[message.GuildID] == nil:
+		discord.ChannelMessageSend(message.ChannelID, "No queue for this server")
+	case len(queue[message.GuildID]) == 0:
+		discord.ChannelMessageSend(message.ChannelID, "Nothing in the queue")
+	default:
+		np := ytdlCache[queue[message.GuildID][0]]
 
-			title := np.Items[0].Snippet.Title
-			if (strings.Contains(title, "-") || strings.Contains(title, "|")) && len(title)-2 >= len(channel) {
+		//no one could ever play music from someone who isnt the artist
+		channel := np.Items[0].Snippet.ChannelTitle
+		for _, i := range []string{"VEVO", "- Topic", "(Video)", "(Official Video)", "M/V", "official",
+			"explicit"} {
+			channel = strings.TrimSuffix(channel, i)
+		}
 
-				switch {
-				case strings.HasPrefix(strings.ToLower(title), strings.ToLower(channel)):
-					title = title[len(channel)+2:]
-				case strings.HasSuffix(strings.ToLower(title), strings.ToLower(channel)):
-					title = title[:len(channel)-2]
-				}
-			}
-			log.Debugf("Lyrics for %v by %v", title, channel)
-			l, err := lyricProvider.Search(channel, title)
-			if err != nil {
-				discord.ChannelMessageSend(message.ChannelID,
-					fmt.Sprintf("Error getting lyrics, wont try from youtube because their API is garbage: %v", err))
-				// I'll do youtube queries if I get more quota
-				/*	ctx := context.Background()
-					service, err := youtube.NewService(ctx, option.WithAPIKey(Config.googleDeveloperKey))
-					if err != nil {
-						discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Error: %v", err))
-						return
-					}
+		title := np.Items[0].Snippet.Title
+		if (strings.Contains(title, "-") || strings.Contains(title, "|")) && len(title)-2 >= len(channel) {
 
-					resp, err := service.Captions.Download(np.Items[0].Id).Context(ctx).Download()
-					if err != nil {
-						discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Error: %v", err))
-						return
-					}
-
-					log.Debugln(resp.Body)*/
-			}
-
-			if len(l) < 1900 {
-				discord.ChannelMessageSend(message.ChannelID, l)
-			} else {
-				buf := bytes.NewReader([]byte(l))
-				r := bufio.NewScanner(buf)
-				r.Split(bufio.ScanLines)
-
-				var txtlines []string
-
-				for r.Scan() {
-					txtlines = append(txtlines, r.Text())
-				}
-
-				var msg string
-				for _, eachline := range txtlines {
-					msg += fmt.Sprintln(eachline)
-					if len(msg) > 1900 {
-						discord.ChannelMessageSend(message.ChannelID, msg)
-						msg = ""
-					}
-				}
-				if msg != "" {
-					discord.ChannelMessageSend(message.ChannelID, msg)
-				}
+			switch {
+			case strings.HasPrefix(strings.ToLower(title), strings.ToLower(channel)):
+				title = title[len(channel)+2:]
+			case strings.HasSuffix(strings.ToLower(title), strings.ToLower(channel)):
+				title = title[:len(channel)-2]
 			}
 		}
 
+		for _, i := range []string{"VEVO", "- Topic", "(Video)", "(Official Video)", "M/V", "(Explicit)",
+			"(Clean)"} {
+			title = strings.TrimSuffix(title, i)
+		}
+
+		title = strings.TrimSpace(title)
+		channel = strings.TrimSpace(channel)
+
+		song = url.QueryEscape(fmt.Sprintf("%v By %v", title, channel))
+		log.Debugf("Lyrics for %v by %v", title, channel)
+	}
+
+	qURL := fmt.Sprintf("https://some-random-api.ml/lyrics?title=%v",
+		song)
+	log.Tracef(qURL)
+	resp, err := http.Get(qURL)
+	if err != nil {
+		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf(
+			"Error getting lyrics, wont try from youtube because their API is garbage: %v",
+			err))
+	}
+
+	defer resp.Body.Close()
+
+	decoder := json.NewDecoder(resp.Body)
+	var l Lyrics
+	err = decoder.Decode(&l)
+	if err != nil {
+		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf(
+			"Error unmarshalling lyrics, wont try from youtube because their API is garbage: %v",
+			err))
+	}
+
+	//too verbose, disable normally
+	//log.Traceln(l)
+
+	//replace \n's with newlines
+	l.Lyrics = fmt.Sprintln(l.Lyrics)
+
+	if len(l.Lyrics) < 1000 {
+		discord.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
+			Title:  fmt.Sprintf("%v by %v", l.Title, l.Author),
+			Author: &discordgo.MessageEmbedAuthor{},
+			Color:  rand.Intn(16777215),
+			Fields: []*discordgo.MessageEmbedField{
+				&discordgo.MessageEmbedField{
+					Name:  "Lyrics",
+					Value: l.Lyrics,
+				}},
+			Timestamp: time.Now().Format(time.RFC3339)})
+	} else {
+		buf := bytes.NewReader([]byte(l.Lyrics))
+		r := bufio.NewScanner(buf)
+		r.Split(bufio.ScanLines)
+
+		var txtlines []string
+
+		for r.Scan() {
+			txtlines = append(txtlines, r.Text())
+		}
+
+		color := rand.Intn(16777215)
+
+		discord.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
+			Title:  fmt.Sprintf("%v by %v", l.Title, l.Author),
+			Author: &discordgo.MessageEmbedAuthor{},
+			Color:  color,
+			Fields: []*discordgo.MessageEmbedField{
+				&discordgo.MessageEmbedField{
+					Name: "Note",
+					Value: `Lyrics too big, using multiple lines and/or fields. 
+					Blame discord for this limitation`,
+				}},
+			Timestamp: time.Now().Format(time.RFC3339)})
+
+		var msg string
+		var fields []*discordgo.MessageEmbedField
+		for _, eachline := range txtlines {
+			msg += fmt.Sprintln(eachline)
+			if len(msg) > 900 {
+
+				fields = append(fields,
+					&discordgo.MessageEmbedField{
+						Name:  "Lyrics:",
+						Value: msg,
+					})
+
+				if len(fields) == 5 {
+					discord.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
+						Author:    &discordgo.MessageEmbedAuthor{},
+						Color:     color,
+						Fields:    fields,
+						Timestamp: time.Now().Format(time.RFC3339)})
+					fields = []*discordgo.MessageEmbedField{}
+				}
+				msg = ""
+			}
+		}
+		if msg != "" {
+			fields = append(fields,
+				&discordgo.MessageEmbedField{
+					Name:  "Lyrics:",
+					Value: msg,
+				})
+		}
+		if len(fields) != 0 {
+			discord.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
+				Author:    &discordgo.MessageEmbedAuthor{},
+				Color:     color,
+				Fields:    fields,
+				Timestamp: time.Now().Format(time.RFC3339),
+				Footer:    &discordgo.MessageEmbedFooter{Text: "Final Message"}})
+		}
 	}
 }
 
@@ -784,8 +878,6 @@ func setup() {
 	Config.googleDeveloperKey = Config.GoogleDeveloperKey
 	Config.prefix = Config.Prefix
 	Config.discordBotToken = Config.DiscordBotToken
-
-	lyricProvider = lyrics.New(lyrics.WithGeniusLyrics(Config.GeniusToken))
 
 	//println(Config.googleDeveloperKey)
 
