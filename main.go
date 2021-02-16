@@ -98,7 +98,7 @@ func discordStart() {
 	discord.AddHandler(func(discord *discordgo.Session, ready *discordgo.Ready) {
 		servers := discord.State.Guilds
 
-		err = discord.UpdateStatus(2, fmt.Sprintf(
+		err = discord.UpdatePlayingStatus(2, fmt.Sprintf(
 			"It might not be good, but it's mine| %vhelp | Jamming in %v servers!",
 			Config.prefix, len(servers)))
 		if err != nil {
