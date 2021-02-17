@@ -98,14 +98,14 @@ func discordStart() {
 	discord.AddHandler(func(discord *discordgo.Session, ready *discordgo.Ready) {
 		servers := discord.State.Guilds
 
-		err = discord.UpdatePlayingStatus(2, fmt.Sprintf(
+		err = discord.UpdateGameStatus(2, fmt.Sprintf(
 			"It might not be good, but it's mine| %vhelp | Jamming in %v servers!",
 			Config.prefix, len(servers)))
 		if err != nil {
 			log.Errorln("Error attempting to set my status")
 		}
 
-		log.Debugf("PinnerBoi has started on %d servers", len(servers))
+		log.Debugf("JAMB has started on %d servers", len(servers))
 	})
 
 	err = discord.Open()
