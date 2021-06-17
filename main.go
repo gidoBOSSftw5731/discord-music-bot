@@ -608,6 +608,12 @@ func getLyrics(discord *discordgo.Session, message *discordgo.MessageCreate,
 lyricGettingLoop:
 	for {
 		count++
+		// avoid indefinite loops from the api being bad at existing
+		if count > 20 {
+			discord.ChannelMessageSend(message.ChannelID,
+				"There's some repeating error with the API, maybe try again or contact the bot owner")
+			break lyricGettingLoop
+		}
 
 		qURL := fmt.Sprintf("https://some-random-api.ml/lyrics?title=%v",
 			song)
@@ -639,9 +645,12 @@ lyricGettingLoop:
 			discord.ChannelMessageSend(message.ChannelID,
 				"The api says no song, so idk what to tell you")
 			return
+		case "Too many requests, please try again later.":
+			time.Sleep(5*time.Second)
+			continue lyricGettingLoop
 		case "":
 		default:
-			log.Errorf("Error returned from API: %v", err)
+			log.Errorf("Error returned from API: %v", l.Error)
 			continue
 		}
 
