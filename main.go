@@ -35,7 +35,7 @@ const (
 	botOwner = "181965297249550336"
 )
 
-//Lyrics parses the json for the lyrics
+// Lyrics parses the json for the lyrics
 type Lyrics struct {
 	Title     string `json:"title"`
 	Author    string `json:"author"`
@@ -46,7 +46,7 @@ type Lyrics struct {
 	Links struct {
 		Genius string `json:"genius"`
 	} `json:"links"`
-	Error string `json:"error",omitempty`
+	Error string `json:"error", omitempty`
 }
 
 var Config = struct {
@@ -135,7 +135,7 @@ func main() {
 	discordStart()
 }
 
-//for legacy support, please dont rely on this
+// for legacy support, please dont rely on this
 // It's 4am, I woke up at 10pm, I really cba to change all the calls
 // to this damn function
 func errCheck(msg string, err error) {
@@ -486,7 +486,7 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 			// there definitely could never be bad data, it could never happen
 			ptime, _ := time.Parse(time.RFC3339, np.Items[0].Snippet.PublishedAt)
 			fields := []*discordgo.MessageEmbedField{
-				&discordgo.MessageEmbedField{
+				{
 					Name:  "Publishing time",
 					Value: ptime.Format(time.RFC1123),
 				}}
@@ -554,8 +554,8 @@ func commandHandler(discord *discordgo.Session, message *discordgo.MessageCreate
 	}
 }
 
-//getLyrics get's the lyrics the user requested and prints them to the chat
-//yes, it's a bit long. I know.
+// getLyrics get's the lyrics the user requested and prints them to the chat
+// yes, it's a bit long. I know.
 func getLyrics(discord *discordgo.Session, message *discordgo.MessageCreate,
 	command string, commandContents []string) {
 	var song string
@@ -646,7 +646,7 @@ lyricGettingLoop:
 				"The api says no song, so idk what to tell you")
 			return
 		case "Too many requests, please try again later.":
-			time.Sleep(5*time.Second)
+			time.Sleep(5 * time.Second)
 			continue lyricGettingLoop
 		case "":
 		default:
