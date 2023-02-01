@@ -931,7 +931,7 @@ func dlToTmp(url string) (string, error) {
 	youtubeDl.Options.AudioFormat.Value = "mp3"
 	youtubeDl.Options.KeepVideo = goydl.BoolOption{Value: false} // why is this a thing
 	// youtubeDl.Options.AudioQuality = goydl.StringOption{Value: "0"}
-	youtubeDl.Options.Format.Value = "bestaudio/best"
+	youtubeDl.Options.Format.Value = "251/250/249/bestaudio/best"
 
 	youtubeDl.VideoURL = fmt.Sprintf("www.youtube.com/watch?v=%v", url)
 	// listen to errors from ydl
