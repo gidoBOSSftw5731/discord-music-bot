@@ -46,7 +46,7 @@ type Lyrics struct {
 	Links struct {
 		Genius string `json:"genius"`
 	} `json:"links"`
-	Error string `json:"error", omitempty`
+	Error string `json:"error" omitempty`
 }
 
 var Config = struct {
@@ -83,49 +83,49 @@ var (
 	youtubeURLRegex = regexp.MustCompile(
 		`(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?`)
 	helpMessageFields = []*discordgo.MessageEmbedField{
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Play a song",
 			Value: "p: Play song, either provide title, youtube ID, or youtube URL."},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Show server queue",
 			Value: "q: List the queue for the server"},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Leave the voice channel",
 			Value: "d: Self explainatory"},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Loop one track",
 			Value: "loop: Self explainatory, overrides loopqueue"},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Loop queue",
 			Value: "loopqueue: Self explainatory"},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Remove duplicate tracks",
 			Value: "removedupes: removes duplicate songs, the first one in the queue stays."},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Shuffle",
 			Value: "shuffle: mixes tracks randomly,  does not follow looping and may cause unexpected issues while looping."},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Skip the current song",
 			Value: "s: Skips the current song, does NOT remove from queue, cannot resume"},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Remove a song",
 			Value: "remove: Removes the song input in the same order as is in the queue. will not skip if it is the current song"},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Now Playing",
 			Value: "np: Self explainatory"},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Play next",
 			Value: "playnext: (alias playtop) play a song next, dont skip to it though"},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Get Lyrics",
 			Value: "lyrics: Get's lyrics from \"The Internet\" for either the current song playing, or the name of the song if provided in the command"},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Extra commands",
 			Value: "If there is a command not listed here, check the rythm help list, some commands are unfinished or just for testing: https://rythmbot.co/features#list"},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "Invite this bot to other servers",
 			Value: "Invite URL: https://discord.com/api/oauth2/authorize?client_id=581249727958351891&permissions=37054784&scope=bot"},
-		&discordgo.MessageEmbedField{
+		{
 			Name:  "See the source code",
 			Value: "Github URL: https://imagen.click/d/jamb_git"}}
 )
@@ -233,6 +233,7 @@ func commandPlay(discord *discordgo.Session, message *discordgo.MessageCreate,
 		if err != nil {
 			discord.ChannelMessageSend(message.ChannelID,
 				fmt.Sprintf("Error saving video: %v", err))
+			log.Errorln("Error saving video: ", err)
 			return
 		}
 
@@ -695,7 +696,7 @@ lyricGettingLoop:
 	if len(l.Lyrics) < 1000 {
 		embed.Fields =
 			[]*discordgo.MessageEmbedField{
-				&discordgo.MessageEmbedField{
+				{
 					Name:  "Lyrics",
 					Value: l.Lyrics,
 				}}
@@ -715,7 +716,7 @@ lyricGettingLoop:
 			Author: &discordgo.MessageEmbedAuthor{},
 			Color:  color,
 			Fields: []*discordgo.MessageEmbedField{
-				&discordgo.MessageEmbedField{
+				{
 					Name: "Note",
 					Value: `Lyrics too big, using multiple messages and/or fields. 
 					Blame discord for this limitation`,
@@ -795,7 +796,7 @@ func returnPlaylist(input string) ([]string, error) {
 	}
 
 	// Make the API call to YouTube.
-	call := service.Search.List("id").
+	call := service.Search.List([]string{"id"}).
 		Q(input).
 		MaxResults(1)
 	response, err := call.Do()
@@ -817,7 +818,7 @@ func returnPlaylist(input string) ([]string, error) {
 
 	}
 
-	itemCall := service.PlaylistItems.List("id,snippet").
+	itemCall := service.PlaylistItems.List([]string{"id", "snippet"}).
 		PlaylistId(result.Id.PlaylistId).
 		MaxResults(50)
 
@@ -829,7 +830,11 @@ func returnPlaylist(input string) ([]string, error) {
 	var listOfVideos []string
 
 	for _, i := range playlistResp.Items {
-		out, _ := dlToTmp(i.Snippet.ResourceId.VideoId)
+		out, err := dlToTmp(i.Snippet.ResourceId.VideoId)
+		if err != nil {
+			log.Errorln("Error downloading song from playlist", err)
+			continue
+		}
 
 		// this is stupid and will max out my quota. Too bad!
 		// This also doesnt work always, but I dont have the energy to make it better.
@@ -852,7 +857,7 @@ func returnPlaylist(input string) ([]string, error) {
 func getVideoInfo(result string, service *youtube.Service) (*youtube.VideoListResponse, error) {
 	vidService := youtube.NewVideosService(service)
 
-	return vidService.List("snippet,id").Id(result).Do()
+	return vidService.List([]string{"snippet", "id"}).Id(result).Do()
 }
 
 func searchForVideo(input string) (*youtube.VideoListResponse, error) {
@@ -877,7 +882,7 @@ func searchForVideo(input string) (*youtube.VideoListResponse, error) {
 	// Each one of these API quotas costs me 100 quota points
 	// I shouldnt have to pay that much for a goddamn search
 	// this will max out my quota, too bad!
-	call := service.Search.List("id").
+	call := service.Search.List([]string{"id"}).
 		Q(input).
 		MaxResults(3)
 	response, err := call.Do()
@@ -937,10 +942,14 @@ func dlToTmp(url string) (string, error) {
 	dwnld, err := youtubeDl.Download()
 	//panic("testing download error")
 	if err != nil {
-		//		log.Debugf("Path: %v", dwnld.Path)
+		//log.Errorf("Path: %v, Error: %v", dwnld.Path, err)
 		return "", err
 	}
-	dwnld.Wait()
+	err = dwnld.Wait()
+	if err != nil {
+		//log.Errorf("Path: %v, err: %v", dwnld.Path, err)
+		return "", err
+	}
 
 	return fpath, nil
 }

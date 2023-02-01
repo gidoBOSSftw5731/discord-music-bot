@@ -1,3 +1,5 @@
 tmp/
 config.yml
 config.json
+.cache/
+__debug_bin
